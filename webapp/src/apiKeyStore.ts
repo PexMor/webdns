@@ -1,17 +1,22 @@
-import { STORES, runStore } from "./webdnsDb.js";
-import { clearBuiltinApiKey, upsertBuiltinApiKey } from "./wsHeaderStore.js";
+import { STORES, runStore } from "./webdnsDb";
+import { clearBuiltinApiKey, upsertBuiltinApiKey } from "./wsHeaderStore";
+import type { PreferenceRecord } from "./types";
 
 const API_KEY_PREF = "apiKey";
 const LEGACY_STORAGE_KEY = "dns_api_key";
 
-export async function getApiKey() {
-  const record = await runStore(STORES.prefs, "readonly", (store) => {
-    return new Promise((resolve, reject) => {
-      const req = store.get(API_KEY_PREF);
-      req.onsuccess = () => resolve(req.result ?? null);
-      req.onerror = () => reject(req.error);
-    });
-  });
+export async function getApiKey(): Promise<string | null> {
+  const record = await runStore<PreferenceRecord<string> | null>(
+    STORES.prefs,
+    "readonly",
+    (store) => {
+      return new Promise<PreferenceRecord<string> | null>((resolve, reject) => {
+        const req = store.get(API_KEY_PREF);
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+  );
 
   if (record?.value) {
     return record.value;
@@ -27,7 +32,7 @@ export async function getApiKey() {
   return null;
 }
 
-export async function setApiKey(key) {
+export async function setApiKey(key: string): Promise<void> {
   if (!key) {
     throw new Error("API key cannot be empty");
   }
@@ -38,7 +43,7 @@ export async function setApiKey(key) {
   await upsertBuiltinApiKey(key);
 }
 
-export async function clearApiKey() {
+export async function clearApiKey(): Promise<void> {
   await runStore(STORES.prefs, "readwrite", (store) => {
     store.delete(API_KEY_PREF);
   });

@@ -1,24 +1,29 @@
-import { STORES, runStore } from "./webdnsDb.js";
-import { RECORD_TYPES } from "./recordTypes.js";
+import { STORES, runStore } from "./webdnsDb";
+import { RECORD_TYPES } from "./recordTypes";
+import type { LookupFormState, PreferenceRecord } from "./types";
 
 const LOOKUP_FORM_KEY = "lastLookupForm";
 const DEFAULT_RECORD_TYPES = ["A", "AAAA"];
 
-function normalizeRecordTypes(recordTypes) {
+function normalizeRecordTypes(recordTypes: unknown): string[] {
   if (!Array.isArray(recordTypes)) return DEFAULT_RECORD_TYPES;
   const valid = new Set(RECORD_TYPES);
   const filtered = recordTypes.filter((type) => valid.has(type));
   return filtered.length > 0 ? filtered : DEFAULT_RECORD_TYPES;
 }
 
-export async function getLookupForm() {
-  const record = await runStore(STORES.prefs, "readonly", (store) => {
-    return new Promise((resolve, reject) => {
-      const req = store.get(LOOKUP_FORM_KEY);
-      req.onsuccess = () => resolve(req.result ?? null);
-      req.onerror = () => reject(req.error);
-    });
-  });
+export async function getLookupForm(): Promise<LookupFormState> {
+  const record = await runStore<PreferenceRecord<LookupFormState> | null>(
+    STORES.prefs,
+    "readonly",
+    (store) => {
+      return new Promise<PreferenceRecord<LookupFormState> | null>((resolve, reject) => {
+        const req = store.get(LOOKUP_FORM_KEY);
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+  );
 
   const value = record?.value;
   if (!value || typeof value !== "object") {
@@ -31,7 +36,13 @@ export async function getLookupForm() {
   };
 }
 
-export async function saveLookupForm({ domain, recordTypes }) {
+export async function saveLookupForm({
+  domain,
+  recordTypes,
+}: {
+  domain: string;
+  recordTypes: string[];
+}): Promise<LookupFormState & { updatedAt: string }> {
   const payload = {
     domain: typeof domain === "string" ? domain : "",
     recordTypes: normalizeRecordTypes(recordTypes),

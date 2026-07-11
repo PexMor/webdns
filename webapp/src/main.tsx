@@ -1,8 +1,8 @@
 import { render } from "preact";
-import { App } from "./app.jsx";
+import { App } from "./app";
 import buildInfo from "./build-info.json";
-import { applyTheme, resolveEffectiveTheme } from "./themeStore.js";
-import { applyHelpExampleWrap } from "./displayPrefsStore.js";
+import { applyTheme, resolveEffectiveTheme } from "./themeStore";
+import { applyHelpExampleWrap } from "./displayPrefsStore";
 import "./style.css";
 
 applyTheme("auto");
@@ -17,4 +17,7 @@ console.log(
   "color:#64748b;font-size:0.85em"
 );
 
-render(<App />, document.getElementById("app"));
+const rootElement = document.getElementById("app");
+if (rootElement) {
+  render(<App />, rootElement);
+}

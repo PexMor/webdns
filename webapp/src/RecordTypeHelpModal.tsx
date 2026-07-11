@@ -1,14 +1,19 @@
 import { useEffect, useRef } from "preact/hooks";
-import { getRecordTypeHelp } from "./recordTypeHelp.js";
+import { getRecordTypeHelp } from "./recordTypeHelp";
 
-export function RecordTypeHelpModal({ recordType, onClose }) {
-  const overlayRef = useRef(null);
-  const help = getRecordTypeHelp(recordType);
+export interface RecordTypeHelpModalProps {
+  recordType: string | null;
+  onClose: () => void;
+}
+
+export function RecordTypeHelpModal({ recordType, onClose }: RecordTypeHelpModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const help = getRecordTypeHelp(recordType ?? "");
 
   useEffect(() => {
     if (!recordType) return;
 
-    function handleKey(event) {
+    function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
 
@@ -24,7 +29,7 @@ export function RecordTypeHelpModal({ recordType, onClose }) {
 
   if (!recordType) return null;
 
-  function handleOverlayClick(event) {
+  function handleOverlayClick(event: MouseEvent) {
     if (event.target === overlayRef.current) onClose();
   }
 

@@ -6,9 +6,11 @@ export const STORES = {
   prefs: "preferences",
   history: "lookupHistory",
   quickLookups: "quickLookups",
-};
+} as const;
 
-export function openDb() {
+export type StoreName = (typeof STORES)[keyof typeof STORES];
+
+export function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
@@ -36,10 +38,14 @@ export function openDb() {
   });
 }
 
-export function runStore(storeName, mode, fn) {
+export function runStore<T>(
+  storeName: StoreName,
+  mode: IDBTransactionMode,
+  fn: (store: IDBObjectStore) => T | PromiseLike<T>
+): Promise<T> {
   return openDb().then(
     (db) =>
-      new Promise((resolve, reject) => {
+      new Promise<T>((resolve, reject) => {
         const tx = db.transaction(storeName, mode);
         const store = tx.objectStore(storeName);
         const result = fn(store);

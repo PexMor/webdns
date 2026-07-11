@@ -1,5 +1,7 @@
+import type { RecordTypeGroup } from "./types";
+
 /** DNS record types exposed in the lookup UI (matches hickory-resolver support). */
-export const RECORD_TYPE_GROUPS = [
+export const RECORD_TYPE_GROUPS: RecordTypeGroup[] = [
   {
     label: "Address",
     types: ["A", "AAAA"],
@@ -36,4 +38,4 @@ export const RECORD_TYPE_GROUPS = [
   },
 ];
 
-export const RECORD_TYPES = RECORD_TYPE_GROUPS.flatMap((group) => group.types);
+export const RECORD_TYPES: string[] = RECORD_TYPE_GROUPS.flatMap((group) => group.types);

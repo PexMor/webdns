@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { listCustomServers } from "./dnsServerStore.js";
+import { listCustomServers } from "./dnsServerStore";
 import {
   buildDnsServerOptions,
   deriveWsUrlFromHttp,
@@ -13,46 +13,63 @@ import {
   setStoredDnsServer,
   setStoredHttpServerUrl,
   setStoredWsUrl,
-} from "./loadConfig.js";
-import { initTheme, saveThemePreference } from "./themeStore.js";
-import { initHelpExampleWrap, saveHelpExampleWrap } from "./displayPrefsStore.js";
-import { addHistoryEntry } from "./lookupHistoryStore.js";
-import { getLookupForm, saveLookupForm } from "./lookupFormStore.js";
-import { listQuickLookups } from "./quickLookupStore.js";
-import { listWsHeaders, migrateLegacyApiKey } from "./wsHeaderStore.js";
-import { Menu } from "./menu.jsx";
-import { useDnsSocket } from "./useDnsSocket.js";
-import { RECORD_TYPE_GROUPS } from "./recordTypes.js";
-import { RecordResultCard } from "./RecordResultCard.jsx";
-import { RecordTypeHelpModal } from "./RecordTypeHelpModal.jsx";
-import { humanizeRequestError } from "./formatRecordResult.js";
+} from "./loadConfig";
+import { initTheme, saveThemePreference, type ThemeMode } from "./themeStore";
+import { initHelpExampleWrap, saveHelpExampleWrap, type HelpExampleWrapMode } from "./displayPrefsStore";
+import { addHistoryEntry } from "./lookupHistoryStore";
+import { getLookupForm, saveLookupForm } from "./lookupFormStore";
+import { listQuickLookups } from "./quickLookupStore";
+import { listWsHeaders, migrateLegacyApiKey } from "./wsHeaderStore";
+import { Menu, type LookupSetup, type MenuPanel } from "./menu";
+import { useDnsSocket } from "./useDnsSocket";
+import { RECORD_TYPE_GROUPS } from "./recordTypes";
+import { RecordResultCard } from "./RecordResultCard";
+import { RecordTypeHelpModal } from "./RecordTypeHelpModal";
+import { humanizeRequestError } from "./formatRecordResult";
+import type { CustomDnsServer, DnsServerOption, QuickLookup, RuntimeConfig, WsHeader } from "./types";
 
 const DEFAULT_SELECTED = new Set(["A", "AAAA"]);
 
+interface DnsOverrideNotice {
+  source: string;
+  name: string | null | undefined;
+  requested: string;
+  applied: string;
+  label: string;
+  unavailable: boolean;
+}
+
+interface PendingExecute {
+  domain: string;
+  recordTypes: string[];
+  dnsServerAddress: string;
+  dnsServerResolved: string;
+}
+
 export function App() {
   const [ready, setReady] = useState(false);
-  const [config, setConfig] = useState(null);
-  const [customServers, setCustomServers] = useState([]);
-  const [quickLookups, setQuickLookups] = useState([]);
+  const [config, setConfig] = useState<RuntimeConfig | null>(null);
+  const [customServers, setCustomServers] = useState<CustomDnsServer[]>([]);
+  const [quickLookups, setQuickLookups] = useState<QuickLookup[]>([]);
   const [selectedWsUrl, setSelectedWsUrl] = useState("");
   const [httpServerUrl, setHttpServerUrl] = useState("");
   const [selectedDnsAddress, setSelectedDnsAddress] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPanel, setMenuPanel] = useState(null);
+  const [menuPanel, setMenuPanel] = useState<MenuPanel>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [connectionHeaders, setConnectionHeaders] = useState([]);
-  const [defaultHeaderSuggestions, setDefaultHeaderSuggestions] = useState([]);
-  const [themePreference, setThemePreference] = useState("auto");
-  const [helpExampleWrap, setHelpExampleWrap] = useState("nowrap");
+  const [connectionHeaders, setConnectionHeaders] = useState<WsHeader[]>([]);
+  const [defaultHeaderSuggestions, setDefaultHeaderSuggestions] = useState<WsHeader[]>([]);
+  const [themePreference, setThemePreference] = useState<ThemeMode>("auto");
+  const [helpExampleWrap, setHelpExampleWrap] = useState<HelpExampleWrapMode>("nowrap");
 
   const [domain, setDomain] = useState("");
-  const [selectedTypes, setSelectedTypes] = useState(DEFAULT_SELECTED);
-  const [formError, setFormError] = useState(null);
-  const [helpRecordType, setHelpRecordType] = useState(null);
-  const [dnsOverrideNotice, setDnsOverrideNotice] = useState(null);
-  const [pendingExecute, setPendingExecute] = useState(null);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(DEFAULT_SELECTED);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [helpRecordType, setHelpRecordType] = useState<string | null>(null);
+  const [dnsOverrideNotice, setDnsOverrideNotice] = useState<DnsOverrideNotice | null>(null);
+  const [pendingExecute, setPendingExecute] = useState<PendingExecute | null>(null);
 
-  const pendingHistoryRef = useRef(null);
+  const pendingHistoryRef = useRef<PendingExecute | null>(null);
 
   const resolvedWsUrls = useMemo(
     () => (config ? getResolvedWsUrls(config.wsUrls) : []),
@@ -64,7 +81,7 @@ export function App() {
     return derived || selectedWsUrl;
   }, [httpServerUrl, selectedWsUrl]);
 
-  const dnsOptions = useMemo(
+  const dnsOptions: DnsServerOption[] = useMemo(
     () =>
       config
         ? buildDnsServerOptions(config.dnsServers, customServers, effectiveWsUrl)
@@ -187,7 +204,7 @@ export function App() {
     setPendingExecute(null);
   }, [pendingExecute, status, dnsOptions, effectiveWsUrl]);
 
-  function dnsServerLabel(address) {
+  function dnsServerLabel(address: string): string {
     const match = dnsOptions.find((option) => option.address === address);
     if (!match) return address;
     return `${match.label} (${match.resolvedAddress})`;
@@ -201,7 +218,7 @@ export function App() {
     overrideSource = null,
     overrideName = null,
     autoExecute = false,
-  }) {
+  }: LookupSetup) {
     setFormError(null);
     setDomain(nextDomain);
     setSelectedTypes(new Set(recordTypes));
@@ -241,7 +258,12 @@ export function App() {
     }
   }
 
-  function executeLookup({ domain: queryDomain, recordTypes, dnsServerAddress, dnsServerResolved }) {
+  function executeLookup({
+    domain: queryDomain,
+    recordTypes,
+    dnsServerAddress,
+    dnsServerResolved,
+  }: PendingExecute): boolean {
     const trimmed = queryDomain.trim();
     const sent = query(trimmed, recordTypes, dnsServerResolved);
     if (sent) {
@@ -255,7 +277,7 @@ export function App() {
     return sent;
   }
 
-  function toggleType(type) {
+  function toggleType(type: string) {
     setSelectedTypes((prev) => {
       const next = new Set(prev);
       if (next.has(type)) next.delete(type);
@@ -264,14 +286,14 @@ export function App() {
     });
   }
 
-  function handleWsUrlChange(url) {
+  function handleWsUrlChange(url: string) {
     setHttpServerUrl("");
     setStoredHttpServerUrl("");
     setSelectedWsUrl(url);
     setStoredWsUrl(url);
   }
 
-  function handleHttpServerUrlChange(url) {
+  function handleHttpServerUrlChange(url: string) {
     setHttpServerUrl(url);
     setStoredHttpServerUrl(url);
 
@@ -282,7 +304,7 @@ export function App() {
     }
   }
 
-  function handleDnsServerChange(address) {
+  function handleDnsServerChange(address: string) {
     setSelectedDnsAddress(address);
     setStoredDnsServer(address);
     setDnsOverrideNotice(null);
@@ -299,7 +321,7 @@ export function App() {
     });
   }
 
-  async function handleConnectionHeadersChange(nextHeaders) {
+  async function handleConnectionHeadersChange(nextHeaders?: WsHeader[]): Promise<WsHeader[]> {
     if (nextHeaders) {
       const saved = await saveConnectionHeaders(nextHeaders);
       setConnectionHeaders(saved);
@@ -314,7 +336,7 @@ export function App() {
     return headers;
   }
 
-  function handleSubmit(event) {
+  function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
     setFormError(null);
     setDnsOverrideNotice(null);
@@ -336,24 +358,24 @@ export function App() {
     }
   }
 
-  function handleRunLookupSetup(setup) {
+  function handleRunLookupSetup(setup: LookupSetup) {
     applyLookupSetup({ ...setup, autoExecute: true });
     closeMenu();
   }
 
-  function handleThemeChange(mode) {
+  function handleThemeChange(mode: string) {
     saveThemePreference(mode).then((saved) => {
       setThemePreference(saved);
     });
   }
 
-  function handleHelpExampleWrapChange(mode) {
+  function handleHelpExampleWrapChange(mode: string) {
     saveHelpExampleWrap(mode).then((saved) => {
       setHelpExampleWrap(saved);
     });
   }
 
-  function openMenu(panel = null) {
+  function openMenu(panel: MenuPanel = null) {
     setMenuPanel(panel);
     setMenuOpen(true);
   }
@@ -426,7 +448,7 @@ export function App() {
           autocomplete="off"
           required
           value={domain}
-          onInput={(e) => setDomain(e.currentTarget.value)}
+          onInput={(e) => setDomain((e.currentTarget as HTMLInputElement).value)}
         />
 
         <fieldset>

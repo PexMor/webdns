@@ -1,7 +1,8 @@
-import { STORES, runStore } from "./webdnsDb.js";
+import { STORES, runStore } from "./webdnsDb";
+import type { CustomDnsServer } from "./types";
 
-export async function listCustomServers() {
-  return runStore(STORES.dns, "readonly", (store) => {
+export async function listCustomServers(): Promise<CustomDnsServer[]> {
+  return runStore<CustomDnsServer[]>(STORES.dns, "readonly", (store) => {
     return new Promise((resolve, reject) => {
       const req = store.getAll();
       req.onsuccess = () => resolve(req.result || []);
@@ -10,8 +11,11 @@ export async function listCustomServers() {
   });
 }
 
-export async function addCustomServer(address, label) {
-  const record = {
+export async function addCustomServer(
+  address: string,
+  label?: string
+): Promise<CustomDnsServer> {
+  const record: CustomDnsServer = {
     address,
     label: label || address,
     addedAt: new Date().toISOString(),
@@ -22,13 +26,16 @@ export async function addCustomServer(address, label) {
   });
 }
 
-export async function removeCustomServer(address) {
+export async function removeCustomServer(address: string): Promise<void> {
   return runStore(STORES.dns, "readwrite", (store) => {
     store.delete(address);
   });
 }
 
-export async function importCustomServers(entries, existingAddresses) {
+export async function importCustomServers(
+  entries: Array<{ address?: string; label?: string }>,
+  existingAddresses: string[]
+): Promise<{ added: number; skipped: number }> {
   const known = new Set(existingAddresses);
   let added = 0;
   let skipped = 0;
@@ -52,7 +59,7 @@ export async function importCustomServers(entries, existingAddresses) {
   return { added, skipped };
 }
 
-export async function exportCustomServers() {
+export async function exportCustomServers(): Promise<Pick<CustomDnsServer, "address" | "label">[]> {
   const servers = await listCustomServers();
   return servers.map(({ address, label }) => ({ address, label }));
 }

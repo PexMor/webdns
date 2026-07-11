@@ -26,8 +26,8 @@ all: webapp backend ## Build webapp and backend
 webapp: ## 📦 Build the Vite/Preact PWA (webapp/dist)
 	@echo "$(BLUE)📦 Building webapp...$(RESET)"
 	corepack enable 2>/dev/null || true
-	yarn --cwd $(WEBAPP_DIR) install
-	yarn --cwd $(WEBAPP_DIR) build
+	cd $(WEBAPP_DIR) && yarn install
+	cd $(WEBAPP_DIR) && yarn build
 	@echo "$(GREEN)✅ Webapp built → $(WEBAPP_DIR)/dist/$(RESET)"
 
 backend: webapp ## 🦀 Build native + Linux x86_64/armhf backends into dns-backend/bin/

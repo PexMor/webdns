@@ -1,8 +1,10 @@
+import type { DnsServerConfigEntry, DnsServerOption, RuntimeConfig, WsHeader } from "./types";
+
 const WS_URL_KEY = "dns_ws_url";
 const HTTP_SERVER_URL_KEY = "dns_http_server_url";
 const DNS_SERVER_KEY = "dns_server_address";
 
-export const DEFAULT_CONFIG = {
+export const DEFAULT_CONFIG: RuntimeConfig = {
   wsUrls: ["/ws"],
   dnsServers: [
     { label: "Google Primary", address: "8.8.8.8" },
@@ -14,7 +16,13 @@ export const DEFAULT_CONFIG = {
   wsHeaderQueryMap: {},
 };
 
-function normalizeConfigHeader(entry) {
+interface ConfigHeaderInput {
+  name?: string;
+  value?: string;
+  enabled?: boolean;
+}
+
+function normalizeConfigHeader(entry: ConfigHeaderInput): WsHeader | null {
   if (!entry?.name) return null;
   return {
     name: String(entry.name).trim(),
@@ -24,11 +32,11 @@ function normalizeConfigHeader(entry) {
   };
 }
 
-export function deriveWsUrlFromHttp(httpUrl) {
+export function deriveWsUrlFromHttp(httpUrl: string): string | null {
   const trimmed = httpUrl.trim();
   if (!trimmed) return null;
 
-  let url;
+  let url: URL;
   try {
     url = new URL(trimmed);
   } catch {
@@ -48,11 +56,11 @@ export function deriveWsUrlFromHttp(httpUrl) {
   return `${wsProtocol}//${url.host}${path}`;
 }
 
-export function isValidHttpServerUrl(value) {
+export function isValidHttpServerUrl(value: string): boolean {
   return Boolean(deriveWsUrlFromHttp(value));
 }
 
-export function resolveWsUrl(entry) {
+export function resolveWsUrl(entry: string): string | null {
   if (entry.startsWith("http://") || entry.startsWith("https://")) {
     return deriveWsUrlFromHttp(entry);
   }
@@ -64,7 +72,7 @@ export function resolveWsUrl(entry) {
   return `${protocol}://${location.host}${path}`;
 }
 
-export function resolveAutoDnsHost(wsUrl) {
+export function resolveAutoDnsHost(wsUrl: string): string {
   try {
     const url = new URL(wsUrl);
     const host = url.hostname;
@@ -75,32 +83,42 @@ export function resolveAutoDnsHost(wsUrl) {
   }
 }
 
-export function resolveDnsAddress(address, wsUrl) {
+export function resolveDnsAddress(address: string, wsUrl: string): string {
   if (address === "auto") return resolveAutoDnsHost(wsUrl);
   return address;
 }
 
-function isValidConfig(data) {
-  return (
-    data &&
-    Array.isArray(data.wsUrls) &&
-    Array.isArray(data.dnsServers) &&
-    data.dnsServers.every((s) => s && typeof s.address === "string")
+function isValidConfig(data: unknown): data is {
+  wsUrls: string[];
+  dnsServers: DnsServerConfigEntry[];
+  wsConnectionHeaders?: unknown;
+  wsHeaderQueryMap?: unknown;
+} {
+  const d = data as Record<string, unknown> | null;
+  return Boolean(
+    d &&
+      Array.isArray(d.wsUrls) &&
+      Array.isArray(d.dnsServers) &&
+      d.dnsServers.every(
+        (s) => s && typeof (s as DnsServerConfigEntry).address === "string"
+      )
   );
 }
 
-export async function loadConfig() {
+export async function loadConfig(): Promise<RuntimeConfig> {
   try {
     const res = await fetch("/config.json");
     if (!res.ok) throw new Error("fetch failed");
-    const data = await res.json();
+    const data: unknown = await res.json();
     if (!isValidConfig(data)) throw new Error("invalid schema");
     const wsConnectionHeaders = Array.isArray(data.wsConnectionHeaders)
-      ? data.wsConnectionHeaders.map(normalizeConfigHeader).filter(Boolean)
+      ? (data.wsConnectionHeaders as ConfigHeaderInput[])
+          .map(normalizeConfigHeader)
+          .filter((header): header is WsHeader => header !== null)
       : [];
     const wsHeaderQueryMap =
       data.wsHeaderQueryMap && typeof data.wsHeaderQueryMap === "object"
-        ? data.wsHeaderQueryMap
+        ? (data.wsHeaderQueryMap as Record<string, string>)
         : {};
 
     return {
@@ -119,7 +137,11 @@ export async function loadConfig() {
   }
 }
 
-export function buildWsUrlWithHeaders(baseUrl, headers, queryMap = {}) {
+export function buildWsUrlWithHeaders(
+  baseUrl: string,
+  headers: WsHeader[],
+  queryMap: Record<string, string> = {}
+): string {
   const url = new URL(baseUrl);
 
   for (const header of headers) {
@@ -135,20 +157,27 @@ export function buildWsUrlWithHeaders(baseUrl, headers, queryMap = {}) {
   return url.toString();
 }
 
-export function mergeHeaderSuggestions(storedHeaders, configHeaders) {
+export function mergeHeaderSuggestions(
+  storedHeaders: WsHeader[],
+  configHeaders: WsHeader[]
+): WsHeader[] {
   if (storedHeaders.length > 0) {
     return storedHeaders;
   }
   return configHeaders.map((header) => ({ ...header, suggestion: true }));
 }
 
-export function getResolvedWsUrls(wsUrls) {
-  return wsUrls.map(resolveWsUrl);
+export function getResolvedWsUrls(wsUrls: string[]): string[] {
+  return wsUrls.map(resolveWsUrl).filter((url): url is string => url !== null);
 }
 
-export function buildDnsServerOptions(configServers, customServers, wsUrl) {
-  const seen = new Set();
-  const options = [];
+export function buildDnsServerOptions(
+  configServers: DnsServerConfigEntry[],
+  customServers: DnsServerConfigEntry[],
+  wsUrl: string
+): DnsServerOption[] {
+  const seen = new Set<string>();
+  const options: DnsServerOption[] = [];
 
   for (const entry of configServers) {
     const resolvedAddress = resolveDnsAddress(entry.address, wsUrl);
@@ -177,19 +206,19 @@ export function buildDnsServerOptions(configServers, customServers, wsUrl) {
   return options;
 }
 
-export function getStoredWsUrl() {
+export function getStoredWsUrl(): string | null {
   return localStorage.getItem(WS_URL_KEY);
 }
 
-export function setStoredWsUrl(url) {
+export function setStoredWsUrl(url: string): void {
   localStorage.setItem(WS_URL_KEY, url);
 }
 
-export function getStoredHttpServerUrl() {
+export function getStoredHttpServerUrl(): string {
   return localStorage.getItem(HTTP_SERVER_URL_KEY) ?? "";
 }
 
-export function setStoredHttpServerUrl(url) {
+export function setStoredHttpServerUrl(url: string): void {
   if (url) {
     localStorage.setItem(HTTP_SERVER_URL_KEY, url);
   } else {
@@ -197,15 +226,18 @@ export function setStoredHttpServerUrl(url) {
   }
 }
 
-export function getStoredDnsServer() {
+export function getStoredDnsServer(): string | null {
   return localStorage.getItem(DNS_SERVER_KEY);
 }
 
-export function setStoredDnsServer(address) {
+export function setStoredDnsServer(address: string): void {
   localStorage.setItem(DNS_SERVER_KEY, address);
 }
 
-export function pickInitialWsUrl(resolvedUrls, httpServerUrl = getStoredHttpServerUrl()) {
+export function pickInitialWsUrl(
+  resolvedUrls: string[],
+  httpServerUrl: string = getStoredHttpServerUrl()
+): string {
   const derived = deriveWsUrlFromHttp(httpServerUrl);
   if (derived) {
     const stored = getStoredWsUrl();
@@ -218,13 +250,13 @@ export function pickInitialWsUrl(resolvedUrls, httpServerUrl = getStoredHttpServ
   return resolvedUrls[0];
 }
 
-export function pickInitialDnsServer(options) {
+export function pickInitialDnsServer(options: DnsServerOption[]): string {
   const stored = getStoredDnsServer();
   if (stored && options.some((o) => o.address === stored)) return stored;
   return options[0]?.address ?? "1.1.1.1";
 }
 
-export function isValidIpAddress(value) {
+export function isValidIpAddress(value: string): boolean {
   if (!value || value === "auto") return false;
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) {
     return value.split(".").every((part) => {

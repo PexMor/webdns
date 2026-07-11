@@ -1,12 +1,13 @@
-import { STORES, openDb } from "./webdnsDb.js";
+import { STORES, openDb } from "./webdnsDb";
+import type { LookupHistoryEntry } from "./types";
 
 const MAX_HISTORY = 100;
 
-function typesKey(recordTypes) {
+function typesKey(recordTypes: string[]): string {
   return [...recordTypes].sort().join(",");
 }
 
-function entriesMatch(a, b) {
+function entriesMatch(a: LookupHistoryEntry, b: LookupHistoryEntry): boolean {
   return (
     a.domain === b.domain &&
     a.dnsServerAddress === b.dnsServerAddress &&
@@ -14,9 +15,9 @@ function entriesMatch(a, b) {
   );
 }
 
-function getAllNewestFirst(store) {
+function getAllNewestFirst(store: IDBObjectStore): Promise<LookupHistoryEntry[]> {
   return new Promise((resolve, reject) => {
-    const results = [];
+    const results: LookupHistoryEntry[] = [];
     const req = store.index("timestamp").openCursor(null, "prev");
     req.onsuccess = () => {
       const cursor = req.result;
@@ -31,7 +32,7 @@ function getAllNewestFirst(store) {
   });
 }
 
-function pruneOld(store) {
+function pruneOld(store: IDBObjectStore): Promise<void> {
   return new Promise((resolve, reject) => {
     const countReq = store.count();
     countReq.onsuccess = () => {
@@ -59,7 +60,7 @@ function pruneOld(store) {
   });
 }
 
-export async function listHistory() {
+export async function listHistory(): Promise<LookupHistoryEntry[]> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.history, "readonly");
@@ -69,8 +70,10 @@ export async function listHistory() {
   });
 }
 
-export async function addHistoryEntry(entry) {
-  const record = {
+export type LookupHistoryInput = Omit<LookupHistoryEntry, "id" | "timestamp">;
+
+export async function addHistoryEntry(entry: LookupHistoryInput): Promise<LookupHistoryEntry> {
+  const record: LookupHistoryEntry = {
     domain: entry.domain,
     recordTypes: [...entry.recordTypes],
     dnsServerAddress: entry.dnsServerAddress,
@@ -101,7 +104,7 @@ export async function addHistoryEntry(entry) {
   });
 }
 
-export async function clearHistory() {
+export async function clearHistory(): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.history, "readwrite");
@@ -112,6 +115,6 @@ export async function clearHistory() {
   });
 }
 
-export function suggestQuickLookupName(domain, recordTypes) {
+export function suggestQuickLookupName(domain: string, recordTypes: string[]): string {
   return `${recordTypes.join("+")} ${domain}`;
 }

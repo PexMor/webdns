@@ -1,5 +1,7 @@
+import type { RecordTypeHelpEntry } from "./types";
+
 /** Plain-language descriptions for DNS record types shown in the lookup UI. */
-export const RECORD_TYPE_HELP = {
+export const RECORD_TYPE_HELP: Record<string, RecordTypeHelpEntry> = {
   A: {
     title: "A record",
     description:
@@ -193,7 +195,7 @@ export const RECORD_TYPE_HELP = {
   },
 };
 
-export function getRecordTypeHelp(type) {
+export function getRecordTypeHelp(type: string): RecordTypeHelpEntry {
   return (
     RECORD_TYPE_HELP[type] ?? {
       title: `${type} record`,

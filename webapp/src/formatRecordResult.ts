@@ -1,9 +1,16 @@
-/**
- * Turn a per-record-type DNS result into a display-friendly shape.
- *
- * @returns {{ kind: "success" | "empty" | "error", message: string | null, records: string[] }}
- */
-export function describeRecordResult(result, domain) {
+import type { DnsRecordResult } from "./types";
+
+export interface DescribedRecordResult {
+  kind: "success" | "empty" | "error";
+  message: string | null;
+  records: string[];
+}
+
+/** Turn a per-record-type DNS result into a display-friendly shape. */
+export function describeRecordResult(
+  result: DnsRecordResult,
+  domain: string
+): DescribedRecordResult {
   const type = result.record_type;
   const records = result.records ?? [];
 
@@ -27,7 +34,7 @@ export function describeRecordResult(result, domain) {
 }
 
 /** Humanize top-level WebSocket / request errors. */
-export function humanizeRequestError(error) {
+export function humanizeRequestError(error: string | null | undefined): string | null {
   if (!error) return null;
 
   const lower = error.toLowerCase();
@@ -41,7 +48,7 @@ export function humanizeRequestError(error) {
   return error;
 }
 
-function humanizeLookupError(error, type, domain) {
+function humanizeLookupError(error: string, type: string, domain: string): string {
   const lower = error.toLowerCase();
 
   if (lower.includes("does not exist")) {

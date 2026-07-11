@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import buildInfo from "./build-info.json";
-import { THEME_MODES } from "./themeStore.js";
-import { HELP_EXAMPLE_WRAP_MODES } from "./displayPrefsStore.js";
+import { THEME_MODES, type ThemeMode } from "./themeStore";
+import { HELP_EXAMPLE_WRAP_MODES, type HelpExampleWrapMode } from "./displayPrefsStore";
 import {
   exportCustomServers,
   importCustomServers,
   listCustomServers,
   addCustomServer,
   removeCustomServer,
-} from "./dnsServerStore.js";
+} from "./dnsServerStore";
 import {
   clearHistory,
   listHistory,
   suggestQuickLookupName,
-} from "./lookupHistoryStore.js";
+} from "./lookupHistoryStore";
 import {
   addQuickLookup,
   exportQuickLookups,
@@ -22,35 +22,86 @@ import {
   removeQuickLookup,
   reorderQuickLookups,
   updateQuickLookup,
-} from "./quickLookupStore.js";
+} from "./quickLookupStore";
 import {
   exportWsHeaders,
   importWsHeaders,
-  listWsHeaders,
   removeWsHeader,
-} from "./wsHeaderStore.js";
-import { deriveWsUrlFromHttp, isValidIpAddress } from "./loadConfig.js";
+} from "./wsHeaderStore";
+import { deriveWsUrlFromHttp, isValidIpAddress } from "./loadConfig";
+import type {
+  CustomDnsServer,
+  DnsServerOption,
+  LookupHistoryEntry,
+  QuickLookup,
+  WsHeader,
+} from "./types";
 
-function maskHeaderValue(value) {
+export type MenuPanel = "settings" | "history" | "quick-lookups" | "about" | null;
+
+export interface LookupSetup {
+  domain: string;
+  recordTypes: string[];
+  includeDnsServer?: boolean;
+  dnsServerAddress?: string | null;
+  overrideSource?: string | null;
+  overrideName?: string | null;
+  autoExecute?: boolean;
+}
+
+function maskHeaderValue(value: string): string {
   if (!value) return "";
   return "••••••";
 }
 
-function formatHistoryTime(timestamp) {
+function formatHistoryTime(timestamp: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
   return date.toLocaleString();
 }
 
-function dnsServerLabel(address, dnsOptions) {
+function dnsServerLabel(address: string, dnsOptions: DnsServerOption[]): string {
   const match = dnsOptions.find((option) => option.address === address);
   if (!match) return address;
   return `${match.label} (${match.resolvedAddress})`;
 }
 
-function quickLookupDnsMeta(preset, dnsOptions) {
+function quickLookupDnsMeta(preset: QuickLookup, dnsOptions: DnsServerOption[]): string | null {
   if (!preset.includeDnsServer || !preset.dnsServerAddress) return null;
   return dnsServerLabel(preset.dnsServerAddress, dnsOptions);
+}
+
+export interface MenuProps {
+  open: boolean;
+  panel: MenuPanel;
+  onOpenPanel: (panel: MenuPanel) => void;
+  onClose: () => void;
+  quickLookups: QuickLookup[];
+  onQuickLookupsChange: (items: QuickLookup[]) => void;
+  onRunLookupSetup: (setup: LookupSetup) => void;
+  currentDomain: string;
+  currentRecordTypes: string[];
+  currentDnsServerAddress: string;
+  wsUrls: string[];
+  selectedWsUrl: string;
+  httpServerUrl: string;
+  onWsUrlChange: (url: string) => void;
+  onHttpServerUrlChange: (url: string) => void;
+  dnsOptions: DnsServerOption[];
+  selectedDnsAddress: string;
+  onDnsServerChange: (address: string) => void;
+  apiKeyInput: string;
+  hasApiKey: boolean;
+  onApiKeyInput: (value: string) => void;
+  onApiKeySave: () => void;
+  connectionHeaders: WsHeader[];
+  defaultHeaderSuggestions: WsHeader[];
+  onConnectionHeadersChange: (headers?: WsHeader[]) => Promise<WsHeader[]>;
+  onCustomServersChange: (servers: CustomDnsServer[]) => void;
+  themePreference: ThemeMode;
+  onThemeChange: (mode: string) => void;
+  helpExampleWrap: HelpExampleWrapMode;
+  onHelpExampleWrapChange: (mode: string) => void;
 }
 
 export function Menu({
@@ -84,13 +135,13 @@ export function Menu({
   onThemeChange,
   helpExampleWrap,
   onHelpExampleWrapChange,
-}) {
-  const overlayRef = useRef(null);
+}: MenuProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
 
-    function handleKey(event) {
+    function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
 
@@ -100,7 +151,7 @@ export function Menu({
 
   if (!open) return null;
 
-  function handleOverlayClick(event) {
+  function handleOverlayClick(event: MouseEvent) {
     if (event.target === overlayRef.current) onClose();
   }
 
@@ -198,7 +249,6 @@ export function Menu({
           <HistoryPanel
             onRunLookupSetup={onRunLookupSetup}
             onQuickLookupsChange={onQuickLookupsChange}
-            dnsOptions={dnsOptions}
             onBack={() => onOpenPanel(null)}
           />
         )}
@@ -219,6 +269,30 @@ export function Menu({
       </div>
     </div>
   );
+}
+
+interface SettingsPanelProps {
+  wsUrls: string[];
+  selectedWsUrl: string;
+  httpServerUrl: string;
+  onWsUrlChange: (url: string) => void;
+  onHttpServerUrlChange: (url: string) => void;
+  dnsOptions: DnsServerOption[];
+  selectedDnsAddress: string;
+  onDnsServerChange: (address: string) => void;
+  apiKeyInput: string;
+  hasApiKey: boolean;
+  onApiKeyInput: (value: string) => void;
+  onApiKeySave: () => void;
+  connectionHeaders: WsHeader[];
+  defaultHeaderSuggestions: WsHeader[];
+  onConnectionHeadersChange: (headers?: WsHeader[]) => Promise<WsHeader[]>;
+  themePreference: ThemeMode;
+  onThemeChange: (mode: string) => void;
+  helpExampleWrap: HelpExampleWrapMode;
+  onHelpExampleWrapChange: (mode: string) => void;
+  onCustomServersChange: (servers: CustomDnsServer[]) => void;
+  onBack: () => void;
 }
 
 function SettingsPanel({
@@ -243,19 +317,19 @@ function SettingsPanel({
   onHelpExampleWrapChange,
   onCustomServersChange,
   onBack,
-}) {
+}: SettingsPanelProps) {
   const derivedWsUrl = deriveWsUrlFromHttp(httpServerUrl);
   const usingHttpDerivation = Boolean(derivedWsUrl);
   const [customAddress, setCustomAddress] = useState("");
   const [customLabel, setCustomLabel] = useState("");
-  const [dnsMessage, setDnsMessage] = useState(null);
-  const [dnsError, setDnsError] = useState(null);
-  const dnsFileInputRef = useRef(null);
+  const [dnsMessage, setDnsMessage] = useState<string | null>(null);
+  const [dnsError, setDnsError] = useState<string | null>(null);
+  const dnsFileInputRef = useRef<HTMLInputElement>(null);
   const [headerName, setHeaderName] = useState("");
   const [headerValue, setHeaderValue] = useState("");
-  const [headerMessage, setHeaderMessage] = useState(null);
-  const [headerError, setHeaderError] = useState(null);
-  const headerFileInputRef = useRef(null);
+  const [headerMessage, setHeaderMessage] = useState<string | null>(null);
+  const [headerError, setHeaderError] = useState<string | null>(null);
+  const headerFileInputRef = useRef<HTMLInputElement>(null);
 
   const displayedHeaders =
     connectionHeaders.length > 0 ? connectionHeaders : defaultHeaderSuggestions;
@@ -268,7 +342,7 @@ function SettingsPanel({
     onCustomServersChange(servers);
   }
 
-  async function handleAddCustom(event) {
+  async function handleAddCustom(event: SubmitEvent) {
     event.preventDefault();
     setDnsError(null);
     setDnsMessage(null);
@@ -292,15 +366,16 @@ function SettingsPanel({
     await refreshCustom();
   }
 
-  async function handleRemoveCustom(serverAddress) {
+  async function handleRemoveCustom(serverAddress: string) {
     await removeCustomServer(serverAddress);
     setDnsMessage("DNS server removed.");
     await refreshCustom();
   }
 
-  async function handleImportCustom(event) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
+  async function handleImportCustom(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
     if (!file) return;
 
     setDnsError(null);
@@ -316,7 +391,7 @@ function SettingsPanel({
       setDnsMessage(`Import complete: ${added} added, ${skipped} skipped.`);
       await refreshCustom();
     } catch (err) {
-      setDnsError(err.message || "Invalid import file.");
+      setDnsError(err instanceof Error ? err.message : "Invalid import file.");
     }
   }
 
@@ -332,11 +407,11 @@ function SettingsPanel({
     setDnsMessage(`Exported ${data.length} custom server(s).`);
   }
 
-  async function refreshHeaders(nextHeaders) {
+  async function refreshHeaders(nextHeaders: WsHeader[]) {
     await onConnectionHeadersChange(nextHeaders);
   }
 
-  async function handleAddHeader(event) {
+  async function handleAddHeader(event: SubmitEvent) {
     event.preventDefault();
     setHeaderError(null);
     setHeaderMessage(null);
@@ -349,7 +424,7 @@ function SettingsPanel({
 
     const next = [...connectionHeaders];
     const index = next.findIndex((entry) => entry.name.toLowerCase() === name.toLowerCase());
-    const row = {
+    const row: WsHeader = {
       name,
       value: headerValue,
       enabled: true,
@@ -368,7 +443,7 @@ function SettingsPanel({
     setHeaderMessage(index >= 0 ? "Header updated." : "Header added.");
   }
 
-  async function handleToggleHeader(name, enabled) {
+  async function handleToggleHeader(name: string, enabled: boolean) {
     setHeaderError(null);
     setHeaderMessage(null);
     const next = connectionHeaders.map((entry) =>
@@ -378,7 +453,7 @@ function SettingsPanel({
     setHeaderMessage(enabled ? "Header enabled." : "Header disabled.");
   }
 
-  async function handleRemoveHeader(name) {
+  async function handleRemoveHeader(name: string) {
     setHeaderError(null);
     setHeaderMessage(null);
     await removeWsHeader(name);
@@ -387,9 +462,10 @@ function SettingsPanel({
     setHeaderMessage("Header removed.");
   }
 
-  async function handleImportHeaders(event) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
+  async function handleImportHeaders(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
     if (!file) return;
 
     setHeaderError(null);
@@ -402,7 +478,7 @@ function SettingsPanel({
       await onConnectionHeadersChange();
       setHeaderMessage(`Import complete: ${added} added, ${updated} updated.`);
     } catch (err) {
-      setHeaderError(err.message || "Invalid import file.");
+      setHeaderError(err instanceof Error ? err.message : "Invalid import file.");
     }
   }
 
@@ -420,7 +496,7 @@ function SettingsPanel({
       URL.revokeObjectURL(url);
       setHeaderMessage(`Exported ${data.length} header(s).`);
     } catch (err) {
-      setHeaderError(err.message || "Could not export headers.");
+      setHeaderError(err instanceof Error ? err.message : "Could not export headers.");
     }
   }
 
@@ -434,7 +510,7 @@ function SettingsPanel({
       <select
         id="theme-mode"
         value={themePreference}
-        onChange={(e) => onThemeChange(e.currentTarget.value)}
+        onChange={(e) => onThemeChange((e.currentTarget as HTMLSelectElement).value)}
       >
         {THEME_MODES.map((mode) => (
           <option key={mode} value={mode}>
@@ -447,7 +523,7 @@ function SettingsPanel({
       <select
         id="help-example-wrap"
         value={helpExampleWrap}
-        onChange={(e) => onHelpExampleWrapChange(e.currentTarget.value)}
+        onChange={(e) => onHelpExampleWrapChange((e.currentTarget as HTMLSelectElement).value)}
       >
         {HELP_EXAMPLE_WRAP_MODES.map((mode) => (
           <option key={mode} value={mode}>
@@ -466,7 +542,7 @@ function SettingsPanel({
         placeholder="http://localhost:4545/some/path"
         autocomplete="off"
         value={httpServerUrl}
-        onInput={(e) => onHttpServerUrlChange(e.currentTarget.value)}
+        onInput={(e) => onHttpServerUrlChange((e.currentTarget as HTMLInputElement).value)}
       />
       {derivedWsUrl ? (
         <p class="menu-hint">
@@ -483,7 +559,7 @@ function SettingsPanel({
         id="ws-url"
         value={usingHttpDerivation ? "" : selectedWsUrl}
         disabled={usingHttpDerivation}
-        onChange={(e) => onWsUrlChange(e.currentTarget.value)}
+        onChange={(e) => onWsUrlChange((e.currentTarget as HTMLSelectElement).value)}
       >
         {usingHttpDerivation && (
           <option value="" disabled>
@@ -501,7 +577,7 @@ function SettingsPanel({
       <select
         id="dns-server"
         value={selectedDnsAddress}
-        onChange={(e) => onDnsServerChange(e.currentTarget.value)}
+        onChange={(e) => onDnsServerChange((e.currentTarget as HTMLSelectElement).value)}
       >
         {dnsOptions.map((option) => (
           <option key={option.address} value={option.address}>
@@ -520,13 +596,13 @@ function SettingsPanel({
           type="text"
           placeholder="8.8.8.8"
           value={customAddress}
-          onInput={(e) => setCustomAddress(e.currentTarget.value)}
+          onInput={(e) => setCustomAddress((e.currentTarget as HTMLInputElement).value)}
         />
         <input
           type="text"
           placeholder="Label (optional)"
           value={customLabel}
-          onInput={(e) => setCustomLabel(e.currentTarget.value)}
+          onInput={(e) => setCustomLabel((e.currentTarget as HTMLInputElement).value)}
         />
         <button type="submit">Add server</button>
       </form>
@@ -578,7 +654,7 @@ function SettingsPanel({
           placeholder="server API key"
           autocomplete="off"
           value={apiKeyInput}
-          onInput={(e) => onApiKeyInput(e.currentTarget.value)}
+          onInput={(e) => onApiKeyInput((e.currentTarget as HTMLInputElement).value)}
         />
         <button type="button" onClick={onApiKeySave}>
           Connect
@@ -615,7 +691,9 @@ function SettingsPanel({
                     <input
                       type="checkbox"
                       checked={header.enabled !== false}
-                      onChange={(e) => handleToggleHeader(header.name, e.currentTarget.checked)}
+                      onChange={(e) =>
+                        handleToggleHeader(header.name, (e.currentTarget as HTMLInputElement).checked)
+                      }
                     />
                     On
                   </label>
@@ -638,14 +716,14 @@ function SettingsPanel({
           type="text"
           placeholder="Authorization"
           value={headerName}
-          onInput={(e) => setHeaderName(e.currentTarget.value)}
+          onInput={(e) => setHeaderName((e.currentTarget as HTMLInputElement).value)}
         />
         <input
           type="password"
           placeholder="Header value"
           autocomplete="off"
           value={headerValue}
-          onInput={(e) => setHeaderValue(e.currentTarget.value)}
+          onInput={(e) => setHeaderValue((e.currentTarget as HTMLInputElement).value)}
         />
         <button type="submit">Save header</button>
       </form>
@@ -672,11 +750,17 @@ function SettingsPanel({
   );
 }
 
-function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, dnsOptions, onBack }) {
-  const [entries, setEntries] = useState([]);
+interface HistoryPanelProps {
+  onRunLookupSetup: (setup: LookupSetup) => void;
+  onQuickLookupsChange: (items: QuickLookup[]) => void;
+  onBack: () => void;
+}
+
+function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, onBack }: HistoryPanelProps) {
+  const [entries, setEntries] = useState<LookupHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState(null);
-  const [error, setError] = useState(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -686,7 +770,7 @@ function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, dnsOptions, onBa
         if (!cancelled) setEntries(items);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message || "Could not load history.");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load history.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -705,7 +789,7 @@ function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, dnsOptions, onBa
     setMessage("History cleared.");
   }
 
-  async function handleSaveAsQuickLookup(entry) {
+  async function handleSaveAsQuickLookup(entry: LookupHistoryEntry) {
     const defaultName = suggestQuickLookupName(entry.domain, entry.recordTypes);
     const name = window.prompt("Quick lookup name:", defaultName);
     if (!name?.trim()) return;
@@ -728,7 +812,7 @@ function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, dnsOptions, onBa
       onQuickLookupsChange(presets);
       setMessage(`Saved quick lookup "${name.trim()}".`);
     } catch (err) {
-      setError(err.message || "Could not save quick lookup.");
+      setError(err instanceof Error ? err.message : "Could not save quick lookup.");
     }
   }
 
@@ -790,6 +874,16 @@ function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, dnsOptions, onBa
   );
 }
 
+interface QuickLookupsPanelProps {
+  quickLookups: QuickLookup[];
+  onQuickLookupsChange: (items: QuickLookup[]) => void;
+  currentDomain: string;
+  currentRecordTypes: string[];
+  currentDnsServerAddress: string;
+  dnsOptions: DnsServerOption[];
+  onBack: () => void;
+}
+
 function QuickLookupsPanel({
   quickLookups,
   onQuickLookupsChange,
@@ -798,17 +892,17 @@ function QuickLookupsPanel({
   currentDnsServerAddress,
   dnsOptions,
   onBack,
-}) {
+}: QuickLookupsPanelProps) {
   const [name, setName] = useState("");
   const [includeDnsServer, setIncludeDnsServer] = useState(true);
-  const [editingId, setEditingId] = useState(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [message, setMessage] = useState(null);
-  const [error, setError] = useState(null);
-  const fileInputRef = useRef(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const trimmedDomain = currentDomain.trim();
-  const canSaveCurrent = trimmedDomain && currentRecordTypes.length > 0;
+  const canSaveCurrent = Boolean(trimmedDomain) && currentRecordTypes.length > 0;
   const defaultName = canSaveCurrent
     ? suggestQuickLookupName(trimmedDomain, currentRecordTypes)
     : "";
@@ -818,7 +912,7 @@ function QuickLookupsPanel({
     onQuickLookupsChange(items);
   }
 
-  async function handleSaveCurrent(event) {
+  async function handleSaveCurrent(event: SubmitEvent) {
     event.preventDefault();
     setError(null);
     setMessage(null);
@@ -845,7 +939,7 @@ function QuickLookupsPanel({
     await refresh();
   }
 
-  async function handleRename(id) {
+  async function handleRename(id: string) {
     const trimmed = editingName.trim();
     if (!trimmed) {
       setError("Name cannot be empty.");
@@ -859,7 +953,7 @@ function QuickLookupsPanel({
     await refresh();
   }
 
-  async function handleRemove(id, name) {
+  async function handleRemove(id: string, name: string) {
     if (!window.confirm(`Delete quick lookup "${name}"?`)) return;
     setError(null);
     await removeQuickLookup(id);
@@ -867,7 +961,7 @@ function QuickLookupsPanel({
     await refresh();
   }
 
-  async function handleToggleDns(id, nextInclude) {
+  async function handleToggleDns(id: string, nextInclude: boolean) {
     setError(null);
     const preset = quickLookups.find((item) => item.id === id);
     if (!preset) return;
@@ -882,15 +976,16 @@ function QuickLookupsPanel({
     await refresh();
   }
 
-  async function handleReorder(id, direction) {
+  async function handleReorder(id: string, direction: "up" | "down") {
     setError(null);
     await reorderQuickLookups(id, direction);
     await refresh();
   }
 
-  async function handleImport(event) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
+  async function handleImport(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
     if (!file) return;
 
     setError(null);
@@ -904,7 +999,7 @@ function QuickLookupsPanel({
       setMessage(`Import complete: ${added} added, ${skipped} skipped.`);
       await refresh();
     } catch (err) {
-      setError(err.message || "Invalid import file.");
+      setError(err instanceof Error ? err.message : "Invalid import file.");
     }
   }
 
@@ -933,7 +1028,7 @@ function QuickLookupsPanel({
           type="text"
           placeholder={defaultName || "A+AAAA example.com"}
           value={name}
-          onInput={(e) => setName(e.currentTarget.value)}
+          onInput={(e) => setName((e.currentTarget as HTMLInputElement).value)}
         />
         <button type="submit" disabled={!canSaveCurrent}>
           Save quick lookup
@@ -943,7 +1038,7 @@ function QuickLookupsPanel({
         <input
           type="checkbox"
           checked={includeDnsServer}
-          onChange={(e) => setIncludeDnsServer(e.currentTarget.checked)}
+          onChange={(e) => setIncludeDnsServer((e.currentTarget as HTMLInputElement).checked)}
         />
         Include DNS server: {dnsServerLabel(currentDnsServerAddress, dnsOptions)}
       </label>
@@ -983,7 +1078,7 @@ function QuickLookupsPanel({
                   <input
                     type="text"
                     value={editingName}
-                    onInput={(e) => setEditingName(e.currentTarget.value)}
+                    onInput={(e) => setEditingName((e.currentTarget as HTMLInputElement).value)}
                   />
                   <button type="button" onClick={() => handleRename(preset.id)}>
                     Save
@@ -1014,7 +1109,9 @@ function QuickLookupsPanel({
                       <input
                         type="checkbox"
                         checked={preset.includeDnsServer}
-                        onChange={(e) => handleToggleDns(preset.id, e.currentTarget.checked)}
+                        onChange={(e) =>
+                          handleToggleDns(preset.id, (e.currentTarget as HTMLInputElement).checked)
+                        }
                       />
                       Override DNS server when run
                     </label>
@@ -1066,9 +1163,19 @@ function QuickLookupsPanel({
   );
 }
 
-function AboutPanel({ onBack }) {
-  const [backendVersion, setBackendVersion] = useState(null);
-  const [backendError, setBackendError] = useState(null);
+interface AboutPanelProps {
+  onBack: () => void;
+}
+
+interface BackendVersionInfo {
+  version: string;
+  gitHash: string;
+  buildTime: string;
+}
+
+function AboutPanel({ onBack }: AboutPanelProps) {
+  const [backendVersion, setBackendVersion] = useState<BackendVersionInfo | null>(null);
+  const [backendError, setBackendError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/version")
@@ -1077,7 +1184,7 @@ function AboutPanel({ onBack }) {
         return res.json();
       })
       .then((data) => setBackendVersion(data))
-      .catch((err) => setBackendError(err.message));
+      .catch((err) => setBackendError(err instanceof Error ? err.message : String(err)));
   }, []);
 
   return (

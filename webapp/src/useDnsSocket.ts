@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import { setApiKey } from "./apiKeyStore.js";
-import { buildWsUrlWithHeaders } from "./loadConfig.js";
+import { setApiKey } from "./apiKeyStore";
+import { buildWsUrlWithHeaders } from "./loadConfig";
 import {
   BUILTIN_APIKEY_NAME,
   hasEnabledCredentials,
   setWsHeaders,
   upsertBuiltinApiKey,
-} from "./wsHeaderStore.js";
+} from "./wsHeaderStore";
+import type { DnsQueryResponse, WsHeader } from "./types";
 
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 const RECONNECT_BACKOFF_FACTOR = 2;
 
-function closeLabel(event) {
+export type ConnectionStatus = "connecting" | "connected" | "error";
+
+function closeLabel(event: CloseEvent): string {
   if (event.code === 1006 || event.code === 1008 || event.code === 1002) {
     return "connection failed (check credentials)";
   }
@@ -22,14 +25,14 @@ function closeLabel(event) {
   return "disconnected";
 }
 
-function reconnectDelayMs(attempt) {
+function reconnectDelayMs(attempt: number): number {
   return Math.min(
     INITIAL_RECONNECT_DELAY_MS * RECONNECT_BACKOFF_FACTOR ** attempt,
     MAX_RECONNECT_DELAY_MS
   );
 }
 
-function hasBuiltinApiKey(headers) {
+function hasBuiltinApiKey(headers: WsHeader[]): boolean {
   return headers.some(
     (header) =>
       header.enabled &&
@@ -38,22 +41,28 @@ function hasBuiltinApiKey(headers) {
   );
 }
 
+export interface UseDnsSocketOptions {
+  connectionHeaders?: WsHeader[];
+  queryMap?: Record<string, string>;
+  credentialsReady?: boolean;
+}
+
 export function useDnsSocket(
-  wsUrl,
-  { connectionHeaders = [], queryMap = {}, credentialsReady = false } = {}
+  wsUrl: string,
+  { connectionHeaders = [], queryMap = {}, credentialsReady = false }: UseDnsSocketOptions = {}
 ) {
-  const [status, setStatus] = useState("error");
+  const [status, setStatus] = useState<ConnectionStatus>("error");
   const [statusLabel, setStatusLabel] = useState("loading…");
   const [hasCredentials, setHasCredentials] = useState(false);
-  const [response, setResponse] = useState(null);
-  const [errorMessage, setErrorMessage] = useState(null);
+  const [response, setResponse] = useState<DnsQueryResponse | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const wsRef = useRef(null);
-  const headersRef = useRef([]);
-  const queryMapRef = useRef(queryMap);
+  const wsRef = useRef<WebSocket | null>(null);
+  const headersRef = useRef<WsHeader[]>([]);
+  const queryMapRef = useRef<Record<string, string>>(queryMap);
   const connectionGenRef = useRef(0);
   const reconnectAttemptRef = useRef(0);
-  const reconnectTimerRef = useRef(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   headersRef.current = connectionHeaders;
   queryMapRef.current = queryMap;
@@ -76,7 +85,7 @@ export function useDnsSocket(
   }, [clearReconnectTimer]);
 
   const startSocket = useCallback(
-    (gen) => {
+    (gen: number) => {
       const headers = headersRef.current;
       if (!hasEnabledCredentials(headers) || !wsUrl) return;
 
@@ -158,7 +167,7 @@ export function useDnsSocket(
       ws.onmessage = (event) => {
         if (gen !== connectionGenRef.current || wsRef.current !== ws) return;
 
-        let data;
+        let data: DnsQueryResponse;
         try {
           data = JSON.parse(event.data);
         } catch {
@@ -179,7 +188,7 @@ export function useDnsSocket(
   );
 
   const connect = useCallback(
-    ({ resetBackoff = true } = {}) => {
+    ({ resetBackoff = true }: { resetBackoff?: boolean } = {}) => {
       const headers = headersRef.current;
       if (!hasEnabledCredentials(headers)) {
         setStatus("error");
@@ -228,7 +237,7 @@ export function useDnsSocket(
   }, [credentialsReady, wsUrl, connectionHeaders, connect, disconnect]);
 
   const saveApiKey = useCallback(
-    async (key) => {
+    async (key: string) => {
       const trimmed = key?.trim();
       if (!trimmed) return;
 
@@ -241,7 +250,7 @@ export function useDnsSocket(
   );
 
   const saveConnectionHeaders = useCallback(
-    async (headers) => {
+    async (headers: WsHeader[]) => {
       const saved = await setWsHeaders(headers);
       setHasCredentials(hasEnabledCredentials(saved));
       connect();
@@ -254,13 +263,16 @@ export function useDnsSocket(
     connect();
   }, [connect]);
 
-  const query = useCallback((domain, recordTypes, dnsServer) => {
+  const query = useCallback((domain: string, recordTypes: string[], dnsServer?: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       return false;
     }
 
-    const payload = { domain, record_types: recordTypes };
+    const payload: { domain: string; record_types: string[]; dns_server?: string } = {
+      domain,
+      record_types: recordTypes,
+    };
     if (dnsServer) {
       payload.dns_server = dnsServer;
     }

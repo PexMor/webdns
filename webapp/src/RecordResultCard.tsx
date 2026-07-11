@@ -1,6 +1,12 @@
-import { describeRecordResult } from "./formatRecordResult.js";
+import { describeRecordResult } from "./formatRecordResult";
+import type { DnsRecordResult } from "./types";
 
-export function RecordResultCard({ result, domain }) {
+export interface RecordResultCardProps {
+  result: DnsRecordResult;
+  domain: string;
+}
+
+export function RecordResultCard({ result, domain }: RecordResultCardProps) {
   const { kind, message, records } = describeRecordResult(result, domain);
 
   return (

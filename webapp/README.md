@@ -35,6 +35,6 @@ Serves the built `dist/` locally for a production-like check without the Rust ba
 
 ## Structure
 
-- `src/app.jsx` — main UI: API key panel, query form, results list, connection status.
-- `src/useDnsSocket.js` — WebSocket connection + DNS query hook.
+- `src/app.tsx` — main UI: API key panel, query form, results list, connection status.
+- `src/useDnsSocket.ts` — WebSocket connection + DNS query hook.
 - `vite-plugin-pwa` generates the manifest and service worker at build time (see `vite.config.js`).
