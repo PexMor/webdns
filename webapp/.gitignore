@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dev-dist/
+
+# Yarn Berry (nodeLinker: node-modules)
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Vite env overrides and local config
+*.local
+.env
+.env.*
+!.env.example
+
+# Generated at build time (yarn icons / prebuild)
+public/icons/*.png
+src/build-info.json

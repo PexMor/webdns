@@ -1,0 +1,13 @@
+{
+  "wsUrls": ["/ws"],
+  "dnsServers": [
+    { "label": "Google Primary", "address": "8.8.8.8" },
+    { "label": "Google Secondary", "address": "8.8.4.4" },
+    { "label": "Cloudflare", "address": "1.1.1.1" },
+    { "label": "Local API Server", "address": "auto" }
+  ],
+  "wsConnectionHeaders": [],
+  "wsHeaderQueryMap": {
+    "Authorization": "authorization"
+  }
+}

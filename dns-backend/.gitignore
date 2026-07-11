@@ -1,0 +1,6 @@
+# Rust build output
+/target/
+/bin/
+
+# Local configuration (copy from config.example.toml)
+config.toml

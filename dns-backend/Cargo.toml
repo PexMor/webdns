@@ -1,0 +1,20 @@
+[package]
+name = "dns-backend"
+version = "0.1.0"
+edition = "2024"
+
+[build-dependencies]
+
+[dependencies]
+axum = { version = "0.8.9", features = ["ws"] }
+clap = { version = "4.6.1", features = ["derive", "env"] }
+config = "0.15.25"
+futures-util = "0.3.32"
+hickory-resolver = "0.26.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tokio = { version = "1.52.3", features = ["full"] }
+tower-http = { version = "0.7.0", features = ["cors", "fs"] }
+nu-ansi-term = "0.50.3"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"

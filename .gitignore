@@ -1,0 +1,21 @@
+# Local agent memory
+.remember/
+
+# MCP / browser automation debug output
+.playwright-mcp/
+
+# Local IDE and agent settings (skills and commands stay tracked)
+**/.claude/settings.local.json
+**/.cursor/settings.local.json
+**/.opencode/settings.local.json
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# OS and editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*~

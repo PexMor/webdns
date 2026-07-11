@@ -1,0 +1,9 @@
+api_key = "super-secret-pwa-key"
+ip = "127.0.0.1"
+port = 8080
+
+# Static web app directory (default: ../webapp/dist relative to the backend crate).
+# web_root = "/var/www/webdns"
+
+# Set to false to expose only /ws and /version (no static files).
+# serve_web = false
