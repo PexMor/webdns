@@ -25,6 +25,7 @@ import { useDnsSocket } from "./useDnsSocket";
 import { RECORD_TYPE_GROUPS } from "./recordTypes";
 import { RecordResultCard } from "./RecordResultCard";
 import { RecordTypeHelpModal } from "./RecordTypeHelpModal";
+import { AuthExpiredOverlay } from "./AuthExpiredOverlay";
 import { humanizeRequestError } from "./formatRecordResult";
 import type { CustomDnsServer, DnsServerOption, QuickLookup, RuntimeConfig, WsHeader } from "./types";
 
@@ -99,6 +100,7 @@ export function App() {
       connectionHeaders,
       queryMap: config?.wsHeaderQueryMap ?? {},
       credentialsReady: ready,
+      identityProxy: config?.identityProxy,
     });
 
   useEffect(() => {
@@ -395,6 +397,7 @@ export function App() {
 
   return (
     <main class="app">
+      <AuthExpiredOverlay />
       <header>
         <h1>DNS Lookup</h1>
         <div class="header-actions">

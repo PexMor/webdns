@@ -61,11 +61,18 @@ export interface DnsServerOption {
   custom: boolean;
 }
 
+/** Identity-aware proxy (Cloudflare Access-style) session-expiry detection. */
+export interface IdentityProxyConfig {
+  enabled: boolean;
+  probePath: string;
+}
+
 export interface RuntimeConfig {
   wsUrls: string[];
   dnsServers: DnsServerConfigEntry[];
   wsConnectionHeaders: WsHeader[];
   wsHeaderQueryMap: Record<string, string>;
+  identityProxy: IdentityProxyConfig;
 }
 
 export interface LookupFormState {

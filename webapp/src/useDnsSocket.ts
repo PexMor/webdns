@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { setApiKey } from "./apiKeyStore";
 import { buildWsUrlWithHeaders } from "./loadConfig";
+import { probeSession } from "./authProbe";
+import { clearAuthExpired, reportAuthExpired } from "./authProxyStore";
 import {
   BUILTIN_APIKEY_NAME,
   hasEnabledCredentials,
   setWsHeaders,
   upsertBuiltinApiKey,
 } from "./wsHeaderStore";
-import type { DnsQueryResponse, WsHeader } from "./types";
+import type { DnsQueryResponse, IdentityProxyConfig, WsHeader } from "./types";
 
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 const RECONNECT_BACKOFF_FACTOR = 2;
 
-export type ConnectionStatus = "connecting" | "connected" | "error";
+export type ConnectionStatus = "connecting" | "connected" | "error" | "auth-expired";
 
 function closeLabel(event: CloseEvent): string {
   if (event.code === 1006 || event.code === 1008 || event.code === 1002) {
@@ -45,11 +47,17 @@ export interface UseDnsSocketOptions {
   connectionHeaders?: WsHeader[];
   queryMap?: Record<string, string>;
   credentialsReady?: boolean;
+  identityProxy?: IdentityProxyConfig;
 }
 
 export function useDnsSocket(
   wsUrl: string,
-  { connectionHeaders = [], queryMap = {}, credentialsReady = false }: UseDnsSocketOptions = {}
+  {
+    connectionHeaders = [],
+    queryMap = {},
+    credentialsReady = false,
+    identityProxy,
+  }: UseDnsSocketOptions = {}
 ) {
   const [status, setStatus] = useState<ConnectionStatus>("error");
   const [statusLabel, setStatusLabel] = useState("loading…");
@@ -60,12 +68,14 @@ export function useDnsSocket(
   const wsRef = useRef<WebSocket | null>(null);
   const headersRef = useRef<WsHeader[]>([]);
   const queryMapRef = useRef<Record<string, string>>(queryMap);
+  const identityProxyRef = useRef<IdentityProxyConfig | undefined>(identityProxy);
   const connectionGenRef = useRef(0);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   headersRef.current = connectionHeaders;
   queryMapRef.current = queryMap;
+  identityProxyRef.current = identityProxy;
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimerRef.current !== null) {
@@ -125,6 +135,7 @@ export function useDnsSocket(
         }
 
         reconnectAttemptRef.current = 0;
+        clearAuthExpired();
         setStatus("connected");
         setStatusLabel("connected");
       };
@@ -139,29 +150,57 @@ export function useDnsSocket(
         console.log(
           `[ws] disconnected (code=${event.code}, reason=${event.reason || "none"})`
         );
-        setStatus("error");
-        setStatusLabel(label);
 
         const attempt = reconnectAttemptRef.current;
-        const delay = reconnectDelayMs(attempt);
-        reconnectAttemptRef.current = attempt + 1;
 
-        console.log(
-          `[ws] scheduling reconnect attempt ${attempt + 1} in ${delay}ms (${label})`
-        );
-        setStatus("connecting");
-        setStatusLabel(`reconnecting in ${Math.round(delay / 1000)}s…`);
+        const scheduleReconnect = () => {
+          const delay = reconnectDelayMs(attempt);
+          reconnectAttemptRef.current = attempt + 1;
 
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectTimerRef.current = null;
-          if (gen !== connectionGenRef.current) {
-            console.log("[ws] reconnect cancelled (connection superseded)");
-            return;
-          }
-          if (!hasEnabledCredentials(headersRef.current) || !wsUrl) return;
-          console.log(`[ws] reconnect attempt ${attempt + 1} starting`);
-          startSocket(gen);
-        }, delay);
+          console.log(
+            `[ws] scheduling reconnect attempt ${attempt + 1} in ${delay}ms (${label})`
+          );
+          setStatus("connecting");
+          setStatusLabel(`reconnecting in ${Math.round(delay / 1000)}s…`);
+
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            if (gen !== connectionGenRef.current) {
+              console.log("[ws] reconnect cancelled (connection superseded)");
+              return;
+            }
+            if (!hasEnabledCredentials(headersRef.current) || !wsUrl) return;
+            console.log(`[ws] reconnect attempt ${attempt + 1} starting`);
+            startSocket(gen);
+          }, delay);
+        };
+
+        const proxy = identityProxyRef.current;
+        if (proxy?.enabled) {
+          setStatus("connecting");
+          setStatusLabel("checking session…");
+
+          probeSession(proxy.probePath).then((result) => {
+            if (gen !== connectionGenRef.current) return;
+
+            if (result === "expired") {
+              console.log("[ws] session expired — halting reconnect loop");
+              reportAuthExpired();
+              setStatus("auth-expired");
+              setStatusLabel("session expired — sign in required");
+              return;
+            }
+
+            setStatus("error");
+            setStatusLabel(label);
+            scheduleReconnect();
+          });
+          return;
+        }
+
+        setStatus("error");
+        setStatusLabel(label);
+        scheduleReconnect();
       };
 
       ws.onmessage = (event) => {

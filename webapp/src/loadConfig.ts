@@ -1,8 +1,19 @@
-import type { DnsServerConfigEntry, DnsServerOption, RuntimeConfig, WsHeader } from "./types";
+import type {
+  DnsServerConfigEntry,
+  DnsServerOption,
+  IdentityProxyConfig,
+  RuntimeConfig,
+  WsHeader,
+} from "./types";
 
 const WS_URL_KEY = "dns_ws_url";
 const HTTP_SERVER_URL_KEY = "dns_http_server_url";
 const DNS_SERVER_KEY = "dns_server_address";
+
+const DEFAULT_IDENTITY_PROXY: IdentityProxyConfig = {
+  enabled: false,
+  probePath: "/version",
+};
 
 export const DEFAULT_CONFIG: RuntimeConfig = {
   wsUrls: ["/ws"],
@@ -14,7 +25,27 @@ export const DEFAULT_CONFIG: RuntimeConfig = {
   ],
   wsConnectionHeaders: [],
   wsHeaderQueryMap: {},
+  identityProxy: { ...DEFAULT_IDENTITY_PROXY },
 };
+
+/**
+ * `identityProxy` is opt-in: any missing/invalid value (not an object,
+ * or absent entirely) resolves to disabled rather than failing config load.
+ */
+export function normalizeIdentityProxy(value: unknown): IdentityProxyConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ...DEFAULT_IDENTITY_PROXY };
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const enabled = candidate.enabled === true;
+  const probePath =
+    typeof candidate.probePath === "string" && candidate.probePath.trim()
+      ? candidate.probePath
+      : DEFAULT_IDENTITY_PROXY.probePath;
+
+  return { enabled, probePath };
+}
 
 interface ConfigHeaderInput {
   name?: string;
@@ -93,6 +124,7 @@ function isValidConfig(data: unknown): data is {
   dnsServers: DnsServerConfigEntry[];
   wsConnectionHeaders?: unknown;
   wsHeaderQueryMap?: unknown;
+  identityProxy?: unknown;
 } {
   const d = data as Record<string, unknown> | null;
   return Boolean(
@@ -126,6 +158,7 @@ export async function loadConfig(): Promise<RuntimeConfig> {
       dnsServers: data.dnsServers.length ? data.dnsServers : DEFAULT_CONFIG.dnsServers,
       wsConnectionHeaders,
       wsHeaderQueryMap,
+      identityProxy: normalizeIdentityProxy(data.identityProxy),
     };
   } catch {
     return {
@@ -133,6 +166,7 @@ export async function loadConfig(): Promise<RuntimeConfig> {
       dnsServers: DEFAULT_CONFIG.dnsServers.map((s) => ({ ...s })),
       wsConnectionHeaders: [],
       wsHeaderQueryMap: {},
+      identityProxy: { ...DEFAULT_IDENTITY_PROXY },
     };
   }
 }

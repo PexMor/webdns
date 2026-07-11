@@ -3,13 +3,14 @@ use crate::AppState;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Query, State,
+        ConnectInfo, Query, State,
     },
     http::HeaderMap,
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 fn header_value(headers: &HeaderMap, name: &str) -> Option<String> {
@@ -17,6 +18,21 @@ fn header_value(headers: &HeaderMap, name: &str) -> Option<String> {
         .get(name)
         .and_then(|value| value.to_str().ok())
         .map(str::to_string)
+}
+
+/// Resolves the logical client address for a connection, preferring the
+/// first `X-Forwarded-For` entry (set by `cloudflared`/reverse proxies)
+/// over the raw TCP peer address, which is otherwise just the proxy.
+pub fn resolve_client_addr(headers: &HeaderMap, peer: SocketAddr) -> String {
+    if let Some(forwarded) = header_value(headers, "x-forwarded-for") {
+        if let Some(first) = forwarded.split(',').next() {
+            let trimmed = first.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    peer.to_string()
 }
 
 pub fn extract_api_key(params: &HashMap<String, String>, headers: &HeaderMap) -> Option<String> {
@@ -47,6 +63,7 @@ pub async fn ws_handler(
     ws: WebSocketUpgrade,
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let unauthorized = || {
@@ -56,16 +73,27 @@ pub async fn ws_handler(
             .unwrap()
     };
 
+    let client_addr = resolve_client_addr(&headers, peer);
+    let forwarded_proto = header_value(&headers, "x-forwarded-proto");
     let extracted = extract_api_key(&params, &headers);
     if is_authorized(extracted.as_deref(), &state.config.api_key) {
-        ws.on_upgrade(move |socket| handle_socket(socket, state))
+        ws.on_upgrade(move |socket| handle_socket(socket, state, client_addr, forwarded_proto))
     } else {
         unauthorized().into_response()
     }
 }
 
-async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
-    tracing::info!("client connected");
+async fn handle_socket(
+    socket: WebSocket,
+    state: Arc<AppState>,
+    client_addr: String,
+    forwarded_proto: Option<String>,
+) {
+    tracing::info!(
+        client = %client_addr,
+        proto = %forwarded_proto.as_deref().unwrap_or("-"),
+        "client connected"
+    );
     let (mut sender, mut receiver) = socket.split();
 
     while let Some(Ok(msg)) = receiver.next().await {
@@ -118,7 +146,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    tracing::info!("client disconnected");
+    tracing::info!(client = %client_addr, "client disconnected");
 }
 
 #[cfg(test)]
@@ -183,5 +211,34 @@ mod tests {
         assert!(is_authorized(Some("abc"), "abc"));
         assert!(!is_authorized(Some("wrong"), "abc"));
         assert!(!is_authorized(None, "abc"));
+    }
+
+    #[test]
+    fn resolve_client_addr_prefers_forwarded_for() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("203.0.113.7, 10.0.0.1"),
+        );
+        let peer: SocketAddr = "127.0.0.1:9999".parse().unwrap();
+
+        assert_eq!(resolve_client_addr(&headers, peer), "203.0.113.7");
+    }
+
+    #[test]
+    fn resolve_client_addr_falls_back_to_peer_without_forwarded_header() {
+        let headers = HeaderMap::new();
+        let peer: SocketAddr = "127.0.0.1:9999".parse().unwrap();
+
+        assert_eq!(resolve_client_addr(&headers, peer), "127.0.0.1:9999");
+    }
+
+    #[test]
+    fn resolve_client_addr_falls_back_to_peer_on_blank_forwarded_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", HeaderValue::from_static("  "));
+        let peer: SocketAddr = "127.0.0.1:9999".parse().unwrap();
+
+        assert_eq!(resolve_client_addr(&headers, peer), "127.0.0.1:9999");
     }
 }

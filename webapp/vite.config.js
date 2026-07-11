@@ -7,6 +7,15 @@ export default defineConfig({
     preact(),
     VitePWA({
       registerType: "autoUpdate",
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
+      injectManifest: {
+        // config.json and the identity-proxy probe path must never be
+        // precached: they're handled by explicit network-first/network-only
+        // routes in src/sw.ts so an expired proxy session stays observable.
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest}"],
+      },
       manifest: {
         name: "DNS Lookup",
         short_name: "DNS Lookup",
@@ -19,9 +28,6 @@ export default defineConfig({
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
         ],
-      },
-      workbox: {
-        navigateFallbackDenylist: [/^\/ws/],
       },
     }),
   ],

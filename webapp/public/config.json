@@ -9,5 +9,9 @@
   "wsConnectionHeaders": [],
   "wsHeaderQueryMap": {
     "Authorization": "authorization"
+  },
+  "identityProxy": {
+    "enabled": false,
+    "probePath": "/version"
   }
 }

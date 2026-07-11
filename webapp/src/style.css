@@ -107,6 +107,7 @@ h1 {
 .status--connecting { color: var(--muted); }
 .status--connected { color: var(--ok); border-color: var(--ok); }
 .status--error { color: var(--error); border-color: var(--error); }
+.status--auth-expired { color: var(--error); border-color: var(--error); font-weight: 600; }
 
 .menu-overlay {
   position: fixed;
@@ -741,6 +742,52 @@ fieldset {
 
 .help-dismiss {
   width: 100%;
+}
+
+.auth-expired-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: clamp(0.75rem, 2vw, 1.5rem);
+}
+
+.auth-expired-panel {
+  background: var(--panel);
+  border: 1px solid var(--error);
+  border-radius: 12px;
+  width: min(92vw, 28rem);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  text-align: center;
+}
+
+.auth-expired-panel h2 {
+  margin: 0;
+  color: var(--error);
+  font-size: 1.15rem;
+}
+
+.auth-expired-panel p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.auth-expired-signin {
+  margin-top: 0.25rem;
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  font-weight: 600;
 }
 
 @media (max-width: 640px) {

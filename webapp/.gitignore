@@ -20,3 +20,6 @@ dev-dist/
 # Generated at build time (yarn icons / prebuild)
 public/icons/*.png
 src/build-info.json
+
+# playwright-cli scratch output
+.playwright-cli/
