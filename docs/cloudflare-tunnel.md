@@ -67,7 +67,7 @@ In the Cloudflare Zero Trust dashboard, create an Access application scoped to
 
 By default `identityProxy.enabled` is `false` and the app behaves exactly as it does today — no
 probing, no overlay, zero behavior change. Once Access is in front of the deployment, edit the
-`config.json` served alongside the built app (`webapp/dist/config.json`, or wherever `serve_web`
+`config.json` served alongside the built app (`docs/app/config.json`, or wherever `serve_web`
 points `dns-backend` at) and set:
 
 ```json

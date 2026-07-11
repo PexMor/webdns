@@ -10,7 +10,7 @@ Build the web client first (see [`../webapp/README.md`](../webapp/README.md)):
 cd ../webapp && yarn build
 ```
 
-Then run the server, which serves `../webapp/dist/` as its static assets:
+Then run the server, which serves `../docs/app/` as its static assets:
 
 ```
 cargo run
@@ -61,7 +61,7 @@ From the project root, `make backend` builds the webapp, compiles the release bi
 ## Using the app
 
 1. Build the web client and start the server (see above).
-2. Open `http://<bind-address>/` in a browser — this serves the built web client from `../webapp/dist/`.
+2. Open `http://<bind-address>/` in a browser — this serves the built web client from `../docs/app/`.
 3. Enter the configured API key in the "API key" field and click **Connect**.
 4. Enter a domain, pick record types, and submit the form to query DNS records over the `/ws` WebSocket endpoint.
 

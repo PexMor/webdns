@@ -10,7 +10,7 @@ make all      # build webapp + backend
 make run      # build and start the server
 ```
 
-The release binary is installed to `dns-backend/bin/dns-backend`. It serves the built web client from `webapp/dist/` and exposes a `/ws` endpoint for DNS queries.
+The release binary is installed to `dns-backend/bin/dns-backend`. It serves the built web client from `docs/app/` and exposes a `/ws` endpoint for DNS queries.
 
 Open `http://127.0.0.1:8080/` (or your configured bind address), enter the API key, and query domains.
 

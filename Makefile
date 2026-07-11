@@ -7,6 +7,7 @@ BOLD   := \033[1m
 RESET  := \033[0m
 
 WEBAPP_DIR   := webapp
+DOCS_APP_DIR := docs/app
 BACKEND_DIR  := dns-backend
 BACKEND_BIN  := $(BACKEND_DIR)/bin/dns-backend
 
@@ -23,12 +24,12 @@ help: ## Show this help
 
 all: webapp backend ## Build webapp and backend
 
-webapp: ## 📦 Build the Vite/Preact PWA (webapp/dist)
+webapp: ## 📦 Build the Vite/Preact PWA (docs/app)
 	@echo "$(BLUE)📦 Building webapp...$(RESET)"
 	corepack enable 2>/dev/null || true
 	cd $(WEBAPP_DIR) && yarn install
 	cd $(WEBAPP_DIR) && yarn build
-	@echo "$(GREEN)✅ Webapp built → $(WEBAPP_DIR)/dist/$(RESET)"
+	@echo "$(GREEN)✅ Webapp built → $(DOCS_APP_DIR)/$(RESET)"
 
 backend: webapp ## 🦀 Build native + Linux x86_64/armhf backends into dns-backend/bin/
 	@echo "$(BLUE)🦀 Building backend (native + cross via zigbuild)...$(RESET)"
@@ -52,5 +53,6 @@ run: backend ## 🚀 Run the backend (builds first)
 clean: ## 🧹 Remove build artifacts
 	@echo "$(YELLOW)🧹 Cleaning...$(RESET)"
 	cargo clean --manifest-path $(BACKEND_DIR)/Cargo.toml
+	find $(DOCS_APP_DIR) -mindepth 1 -not -name '.keep' -delete
 	rm -rf $(WEBAPP_DIR)/dist $(WEBAPP_DIR)/dev-dist $(BACKEND_DIR)/bin
 	@echo "$(GREEN)✅ Clean complete$(RESET)"

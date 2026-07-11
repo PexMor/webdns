@@ -131,7 +131,7 @@ fn default_port() -> u16 {
 }
 
 fn default_web_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../webapp/dist")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../docs/app")
 }
 
 fn default_serve_web() -> bool {

@@ -25,13 +25,13 @@ Runs Vite's dev server with a `/ws` proxy to `ws://127.0.0.1:8080` (the default 
 yarn build
 ```
 
-Outputs the production bundle to `dist/`, which `dns-backend` serves directly (see `../dns-backend/README.md`).
+Outputs the production bundle to `../docs/app/`, which `dns-backend` serves directly (see `../dns-backend/README.md`).
 
 ```
 yarn preview
 ```
 
-Serves the built `dist/` locally for a production-like check without the Rust backend.
+Serves the built `../docs/app/` locally for a production-like check without the Rust backend.
 
 ## Structure
 

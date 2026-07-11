@@ -3,6 +3,10 @@ import preact from "@preact/preset-vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  build: {
+    outDir: "../docs/app",
+    emptyOutDir: true,
+  },
   plugins: [
     preact(),
     VitePWA({
