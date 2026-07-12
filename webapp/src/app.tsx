@@ -16,6 +16,13 @@ import {
 } from "./loadConfig";
 import { initTheme, saveThemePreference, type ThemeMode } from "./themeStore";
 import { initHelpExampleWrap, saveHelpExampleWrap, type HelpExampleWrapMode } from "./displayPrefsStore";
+import {
+  initRrViewPrefs,
+  setRrDefaultViewMode,
+  setRrDetailLevel,
+  type RrViewMode,
+} from "./rrViewPrefsStore";
+import type { DetailLevel } from "./rr";
 import { addHistoryEntry } from "./lookupHistoryStore";
 import { getLookupForm, saveLookupForm } from "./lookupFormStore";
 import { listQuickLookups } from "./quickLookupStore";
@@ -62,6 +69,8 @@ export function App() {
   const [defaultHeaderSuggestions, setDefaultHeaderSuggestions] = useState<WsHeader[]>([]);
   const [themePreference, setThemePreference] = useState<ThemeMode>("auto");
   const [helpExampleWrap, setHelpExampleWrap] = useState<HelpExampleWrapMode>("nowrap");
+  const [rrDetailLevel, setRrDetailLevelState] = useState<DetailLevel>("standard");
+  const [rrDefaultViewMode, setRrDefaultViewModeState] = useState<RrViewMode>("parsed");
 
   const [domain, setDomain] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(DEFAULT_SELECTED);
@@ -107,6 +116,7 @@ export function App() {
     async function init() {
       const theme = await initTheme();
       const exampleWrap = await initHelpExampleWrap();
+      const rrViewPrefs = await initRrViewPrefs();
       const loaded = await loadConfig();
       const custom = await listCustomServers();
       const presets = await listQuickLookups();
@@ -126,6 +136,8 @@ export function App() {
       setDefaultHeaderSuggestions(mergeHeaderSuggestions(headers, loaded.wsConnectionHeaders));
       setThemePreference(theme);
       setHelpExampleWrap(exampleWrap);
+      setRrDetailLevelState(rrViewPrefs.detailLevel);
+      setRrDefaultViewModeState(rrViewPrefs.defaultViewMode);
       setHttpServerUrl(httpUrl);
       setSelectedWsUrl(wsUrl);
       setSelectedDnsAddress(dnsAddress);
@@ -377,6 +389,18 @@ export function App() {
     });
   }
 
+  function handleRrDetailLevelChange(level: string) {
+    setRrDetailLevel(level).then((saved) => {
+      setRrDetailLevelState(saved);
+    });
+  }
+
+  function handleRrDefaultViewModeChange(mode: string) {
+    setRrDefaultViewMode(mode).then((saved) => {
+      setRrDefaultViewModeState(saved);
+    });
+  }
+
   function openMenu(panel: MenuPanel = null) {
     setMenuPanel(panel);
     setMenuOpen(true);
@@ -507,6 +531,8 @@ export function App() {
               key={result.record_type}
               result={result}
               domain={response.domain}
+              defaultViewMode={rrDefaultViewMode}
+              detailLevel={rrDetailLevel}
             />
           ))}
       </section>
@@ -514,6 +540,8 @@ export function App() {
       <RecordTypeHelpModal
         recordType={helpRecordType}
         onClose={() => setHelpRecordType(null)}
+        defaultViewMode={rrDefaultViewMode}
+        detailLevel={rrDetailLevel}
       />
 
       <Menu
@@ -547,6 +575,10 @@ export function App() {
         onThemeChange={handleThemeChange}
         helpExampleWrap={helpExampleWrap}
         onHelpExampleWrapChange={handleHelpExampleWrapChange}
+        rrDetailLevel={rrDetailLevel}
+        onRrDetailLevelChange={handleRrDetailLevelChange}
+        rrDefaultViewMode={rrDefaultViewMode}
+        onRrDefaultViewModeChange={handleRrDefaultViewModeChange}
       />
     </main>
   );

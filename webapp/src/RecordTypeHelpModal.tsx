@@ -1,14 +1,29 @@
-import { useEffect, useRef } from "preact/hooks";
-import { getRecordTypeHelp } from "./recordTypeHelp";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { extractExampleRdata, getRecordTypeHelp } from "./recordTypeHelp";
+import { getRrTypeEntry } from "./rr";
+import type { DetailLevel } from "./rr";
+import type { RrViewMode } from "./rrViewPrefsStore";
 
 export interface RecordTypeHelpModalProps {
   recordType: string | null;
   onClose: () => void;
+  defaultViewMode: RrViewMode;
+  detailLevel: DetailLevel;
 }
 
-export function RecordTypeHelpModal({ recordType, onClose }: RecordTypeHelpModalProps) {
+export function RecordTypeHelpModal({
+  recordType,
+  onClose,
+  defaultViewMode,
+  detailLevel,
+}: RecordTypeHelpModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const help = getRecordTypeHelp(recordType ?? "");
+  const [viewMode, setViewMode] = useState<RrViewMode>(defaultViewMode);
+
+  useEffect(() => {
+    setViewMode(defaultViewMode);
+  }, [recordType, defaultViewMode]);
 
   useEffect(() => {
     if (!recordType) return;
@@ -32,6 +47,11 @@ export function RecordTypeHelpModal({ recordType, onClose }: RecordTypeHelpModal
   function handleOverlayClick(event: MouseEvent) {
     if (event.target === overlayRef.current) onClose();
   }
+
+  const entry = getRrTypeEntry(recordType);
+  const rdata = help.example ? extractExampleRdata(help.example) : null;
+  const parsed = entry && rdata ? entry.parse(rdata) : null;
+  const canShowParsed = Boolean(entry && parsed);
 
   return (
     <div
@@ -60,8 +80,23 @@ export function RecordTypeHelpModal({ recordType, onClose }: RecordTypeHelpModal
         <p class="help-panel__body">{help.description}</p>
         {help.example && (
           <div class="help-panel__example">
-            <p class="help-panel__example-label">Example</p>
-            <pre class="help-panel__example-value">{help.example}</pre>
+            <div class="help-panel__example-header">
+              <p class="help-panel__example-label">Example</p>
+              {canShowParsed && (
+                <button
+                  type="button"
+                  class="rr-view-toggle"
+                  onClick={() => setViewMode((mode) => (mode === "parsed" ? "raw" : "parsed"))}
+                >
+                  {viewMode === "parsed" ? "Show raw" : "Show parsed"}
+                </button>
+              )}
+            </div>
+            {canShowParsed && viewMode === "parsed" && entry && parsed ? (
+              <entry.View fields={entry.fields} detailLevel={detailLevel} value={parsed} />
+            ) : (
+              <pre class="help-panel__example-value">{help.example}</pre>
+            )}
           </div>
         )}
         <footer class="help-panel__footer">

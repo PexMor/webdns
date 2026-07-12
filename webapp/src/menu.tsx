@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import buildInfo from "./build-info.json";
 import { THEME_MODES, type ThemeMode } from "./themeStore";
 import { HELP_EXAMPLE_WRAP_MODES, type HelpExampleWrapMode } from "./displayPrefsStore";
+import { RR_VIEW_MODES, type RrViewMode } from "./rrViewPrefsStore";
+import { DETAIL_LEVELS, type DetailLevel } from "./rr";
 import {
   exportCustomServers,
   importCustomServers,
@@ -102,6 +104,10 @@ export interface MenuProps {
   onThemeChange: (mode: string) => void;
   helpExampleWrap: HelpExampleWrapMode;
   onHelpExampleWrapChange: (mode: string) => void;
+  rrDetailLevel: DetailLevel;
+  onRrDetailLevelChange: (level: string) => void;
+  rrDefaultViewMode: RrViewMode;
+  onRrDefaultViewModeChange: (mode: string) => void;
 }
 
 export function Menu({
@@ -135,6 +141,10 @@ export function Menu({
   onThemeChange,
   helpExampleWrap,
   onHelpExampleWrapChange,
+  rrDetailLevel,
+  onRrDetailLevelChange,
+  rrDefaultViewMode,
+  onRrDefaultViewModeChange,
 }: MenuProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -240,6 +250,10 @@ export function Menu({
             onThemeChange={onThemeChange}
             helpExampleWrap={helpExampleWrap}
             onHelpExampleWrapChange={onHelpExampleWrapChange}
+            rrDetailLevel={rrDetailLevel}
+            onRrDetailLevelChange={onRrDetailLevelChange}
+            rrDefaultViewMode={rrDefaultViewMode}
+            onRrDefaultViewModeChange={onRrDefaultViewModeChange}
             onCustomServersChange={onCustomServersChange}
             onBack={() => onOpenPanel(null)}
           />
@@ -291,6 +305,10 @@ interface SettingsPanelProps {
   onThemeChange: (mode: string) => void;
   helpExampleWrap: HelpExampleWrapMode;
   onHelpExampleWrapChange: (mode: string) => void;
+  rrDetailLevel: DetailLevel;
+  onRrDetailLevelChange: (level: string) => void;
+  rrDefaultViewMode: RrViewMode;
+  onRrDefaultViewModeChange: (mode: string) => void;
   onCustomServersChange: (servers: CustomDnsServer[]) => void;
   onBack: () => void;
 }
@@ -315,6 +333,10 @@ function SettingsPanel({
   onThemeChange,
   helpExampleWrap,
   onHelpExampleWrapChange,
+  rrDetailLevel,
+  onRrDetailLevelChange,
+  rrDefaultViewMode,
+  onRrDefaultViewModeChange,
   onCustomServersChange,
   onBack,
 }: SettingsPanelProps) {
@@ -533,6 +555,40 @@ function SettingsPanel({
       </select>
       <p class="menu-hint">
         Controls how DNS record examples are displayed in record-type help.
+      </p>
+
+      <label for="rr-default-view-mode">Record display</label>
+      <select
+        id="rr-default-view-mode"
+        value={rrDefaultViewMode}
+        onChange={(e) =>
+          onRrDefaultViewModeChange((e.currentTarget as HTMLSelectElement).value)
+        }
+      >
+        {RR_VIEW_MODES.map((mode) => (
+          <option key={mode} value={mode}>
+            {mode === "parsed" ? "Parsed (with raw toggle)" : "Raw"}
+          </option>
+        ))}
+      </select>
+      <p class="menu-hint">
+        Default view for lookup results and record-type help. Each record can still be toggled individually.
+      </p>
+
+      <label for="rr-detail-level">Explanation detail</label>
+      <select
+        id="rr-detail-level"
+        value={rrDetailLevel}
+        onChange={(e) => onRrDetailLevelChange((e.currentTarget as HTMLSelectElement).value)}
+      >
+        {DETAIL_LEVELS.map((level) => (
+          <option key={level} value={level}>
+            {level.charAt(0).toUpperCase() + level.slice(1)}
+          </option>
+        ))}
+      </select>
+      <p class="menu-hint">
+        How much inline guidance parsed record fields show, in lookup results and record-type help.
       </p>
 
       <label for="http-server-url">Server URL (HTTP/HTTPS)</label>

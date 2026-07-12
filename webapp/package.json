@@ -6,10 +6,9 @@
   "packageManager": "yarn@4.17.1",
   "scripts": {
     "icons": "./generate-icons.sh",
-    "dev": "vite",
-    "prebuild": "./generate-icons.sh",
+    "dev": "node scripts/generate-build-info.mjs && vite",
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/generate-build-info.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run"
   },

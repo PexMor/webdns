@@ -167,7 +167,7 @@ export const RECORD_TYPE_HELP: Record<string, RecordTypeHelpEntry> = {
     title: "CSYNC record",
     description:
       "Child-to-parent synchronization hint. Indicates which record types (such as NS or A) should be copied from child to parent during zone maintenance.",
-    example: "example.com.  3600  IN  CSYNC  2025071001 3 6 ( A NS SOA )",
+    example: "example.com.  3600  IN  CSYNC  2025071001 3 ( A NS SOA )",
   },
   HINFO: {
     title: "HINFO record",
@@ -203,4 +203,13 @@ export function getRecordTypeHelp(type: string): RecordTypeHelpEntry {
       example: null,
     }
   );
+}
+
+/** Extracts the RDATA portion (everything after "<name> <ttl> IN <TYPE>") from
+ *  a zone-file-style example line, e.g. `10 mail.example.com.` from
+ *  `example.com.  3600  IN  MX  10 mail.example.com.`. Returns `null` if the
+ *  example doesn't match the expected shape. */
+export function extractExampleRdata(example: string): string | null {
+  const match = /^\S+\s+\d+\s+IN\s+\S+\s+([\s\S]+)$/.exec(example.trim());
+  return match ? match[1].trim() : null;
 }
