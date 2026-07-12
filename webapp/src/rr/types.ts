@@ -16,6 +16,9 @@ export interface RrFieldMeta {
   key: string;
   label: string;
   explain: FieldExplain;
+  /** When set, the field's value is a seconds count rendered as a compact
+   *  colored d/h/m/s breakdown instead of the raw integer. */
+  kind?: "duration-seconds";
 }
 
 /** Parses a raw RDATA presentation string into named fields, or returns `null`

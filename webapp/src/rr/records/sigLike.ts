@@ -71,6 +71,7 @@ function sigFields(kind: "RRSIG" | "SIG"): RrFieldMeta[] {
     {
       key: "originalTtl",
       label: "Original TTL (seconds)",
+      kind: "duration-seconds",
       explain: {
         minimal: "Signed TTL",
         standard: "The TTL of the signed RRset as published, independent of any local TTL decay.",

@@ -54,6 +54,7 @@ const SOA_FIELDS: RrFieldMeta[] = [
   {
     key: "refresh",
     label: "Refresh (seconds)",
+    kind: "duration-seconds",
     explain: {
       minimal: "Refresh interval",
       standard: "How often secondary servers should check for zone updates.",
@@ -63,6 +64,7 @@ const SOA_FIELDS: RrFieldMeta[] = [
   {
     key: "retry",
     label: "Retry (seconds)",
+    kind: "duration-seconds",
     explain: {
       minimal: "Retry interval",
       standard: "How long a secondary waits before retrying a failed refresh.",
@@ -72,6 +74,7 @@ const SOA_FIELDS: RrFieldMeta[] = [
   {
     key: "expire",
     label: "Expire (seconds)",
+    kind: "duration-seconds",
     explain: {
       minimal: "Expiry",
       standard: "How long a secondary keeps serving stale data if it can't reach the primary.",
@@ -82,6 +85,7 @@ const SOA_FIELDS: RrFieldMeta[] = [
   {
     key: "minimum",
     label: "Minimum TTL (seconds)",
+    kind: "duration-seconds",
     explain: {
       minimal: "Negative-cache TTL",
       standard: "The TTL used for caching negative ('no such record') responses.",

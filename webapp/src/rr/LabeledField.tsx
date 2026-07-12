@@ -1,4 +1,5 @@
-import type { DetailLevel, FieldExplain } from "./types";
+import { DurationValue } from "./DurationValue";
+import type { DetailLevel, FieldExplain, RrFieldMeta } from "./types";
 import { resolveExplain } from "./types";
 
 export interface LabeledFieldProps {
@@ -6,9 +7,10 @@ export interface LabeledFieldProps {
   value: string | string[];
   explain: FieldExplain;
   detailLevel: DetailLevel;
+  kind?: RrFieldMeta["kind"];
 }
 
-export function LabeledField({ label, value, explain, detailLevel }: LabeledFieldProps) {
+export function LabeledField({ label, value, explain, detailLevel, kind }: LabeledFieldProps) {
   const explanation = resolveExplain(explain, detailLevel);
   const values = Array.isArray(value) ? value : [value];
 
@@ -19,7 +21,7 @@ export function LabeledField({ label, value, explain, detailLevel }: LabeledFiel
         <span class="rr-field__value">
           {values.map((v, i) => (
             <span class="rr-field__value-item" key={i}>
-              {v}
+              {kind === "duration-seconds" ? <DurationValue seconds={v} /> : v}
             </span>
           ))}
         </span>

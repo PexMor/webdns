@@ -19,6 +19,7 @@ export function FieldList<T extends ParsedFieldValues>({
           value={value[field.key] ?? ""}
           explain={field.explain}
           detailLevel={detailLevel}
+          kind={field.kind}
         />
       ))}
     </div>
