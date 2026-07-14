@@ -99,6 +99,16 @@ export function RecordTypeHelpModal({
             )}
           </div>
         )}
+        {help.transformExample && (
+          <div class="help-panel__transform-example">
+            <p class="help-panel__example-label">Query name from user input</p>
+            <p class="help-panel__transform-example-value">
+              <code>{help.transformExample.input}</code>
+              {" → "}
+              <code>{help.transformExample.queryName}</code>
+            </p>
+          </div>
+        )}
         <footer class="help-panel__footer">
           <button type="button" class="help-dismiss" onClick={onClose}>
             Got it

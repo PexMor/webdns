@@ -61,4 +61,32 @@ describe("RecordTypeHelpModal", () => {
     expect(screen.queryByText("Show raw")).toBeNull();
     expect(screen.queryByText("Show parsed")).toBeNull();
   });
+
+  it("shows the input-to-query transform example for a convention record type", () => {
+    render(
+      <RecordTypeHelpModal
+        recordType="PTR"
+        onClose={vi.fn()}
+        defaultViewMode="parsed"
+        detailLevel="standard"
+      />
+    );
+
+    expect(screen.getByText("Query name from user input")).toBeTruthy();
+    expect(screen.getByText("8.8.4.4")).toBeTruthy();
+    expect(screen.getByText("4.4.8.8.in-addr.arpa")).toBeTruthy();
+  });
+
+  it("does not show a transform example for a record type without one", () => {
+    render(
+      <RecordTypeHelpModal
+        recordType="MX"
+        onClose={vi.fn()}
+        defaultViewMode="parsed"
+        detailLevel="standard"
+      />
+    );
+
+    expect(screen.queryByText("Query name from user input")).toBeNull();
+  });
 });

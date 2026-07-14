@@ -16,30 +16,52 @@ const MAX_RESOLVER_CACHE: usize = 20;
 
 pub struct ResolverCache {
     default: Arc<TokioResolver>,
+    default_key: String,
+    secure_mode: bool,
+    allowed_dns_servers: Vec<IpAddr>,
     cache: Mutex<HashMap<String, Arc<TokioResolver>>>,
 }
 
 impl ResolverCache {
     pub fn new() -> Self {
+        Self::with_secure_mode(false, Vec::new())
+    }
+
+    pub fn with_secure_mode(secure_mode: bool, allowed_dns_servers: Vec<IpAddr>) -> Self {
+        let default_ip = if secure_mode {
+            *allowed_dns_servers
+                .first()
+                .expect("secure_mode requires a non-empty allowlist")
+        } else {
+            DEFAULT_DNS.parse().expect("valid default IP")
+        };
+
         Self {
             default: Arc::new(
-                build_resolver_for_ip(DEFAULT_DNS.parse().expect("valid default IP"))
-                    .expect("failed to build default resolver"),
+                build_resolver_for_ip(default_ip).expect("failed to build default resolver"),
             ),
+            default_key: default_ip.to_string(),
+            secure_mode,
+            allowed_dns_servers,
             cache: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn get(&self, dns_server: Option<&str>) -> Result<Arc<TokioResolver>, String> {
-        let key = dns_server.unwrap_or(DEFAULT_DNS).trim();
+        let key = dns_server.unwrap_or(&self.default_key).trim();
         if key.is_empty() {
             return Ok(self.default.clone());
         }
 
-        key.parse::<IpAddr>()
+        let ip: IpAddr = key
+            .parse()
             .map_err(|_| format!("Invalid DNS server address: {key}"))?;
 
-        if key == DEFAULT_DNS {
+        if self.secure_mode && !self.allowed_dns_servers.contains(&ip) {
+            return Err(format!("DNS server {key} is not permitted in secure mode."));
+        }
+
+        if key == self.default_key {
             return Ok(self.default.clone());
         }
 
@@ -48,7 +70,6 @@ impl ResolverCache {
             return Ok(resolver.clone());
         }
 
-        let ip: IpAddr = key.parse().expect("validated above");
         let resolver = Arc::new(
             build_resolver_for_ip(ip).map_err(|e| format!("Failed to configure resolver: {e}"))?,
         );
@@ -246,5 +267,39 @@ mod tests {
             result.error.as_deref(),
             Some("\"NOTAREALTYPE\" is not a supported DNS record type.")
         );
+    }
+
+    #[test]
+    fn secure_mode_allows_a_listed_server() {
+        let allowed = vec!["9.9.9.9".parse().unwrap()];
+        let cache = ResolverCache::with_secure_mode(true, allowed);
+        assert!(cache.get(Some("9.9.9.9")).is_ok());
+    }
+
+    #[test]
+    fn secure_mode_rejects_an_unlisted_server() {
+        let allowed = vec!["9.9.9.9".parse().unwrap()];
+        let cache = ResolverCache::with_secure_mode(true, allowed);
+        let err = cache.get(Some("8.8.8.8")).unwrap_err();
+        assert_eq!(err, "DNS server 8.8.8.8 is not permitted in secure mode.");
+        assert!(
+            cache.cache.lock().unwrap().is_empty(),
+            "rejected server must not be cached"
+        );
+    }
+
+    #[test]
+    fn secure_mode_defaults_to_first_allowed_server_when_unspecified() {
+        let allowed = vec!["9.9.9.9".parse().unwrap(), "1.1.1.1".parse().unwrap()];
+        let cache = ResolverCache::with_secure_mode(true, allowed);
+        assert!(cache.get(None).is_ok());
+        assert_eq!(cache.default_key, "9.9.9.9");
+    }
+
+    #[test]
+    fn secure_mode_disabled_allows_any_valid_server() {
+        let cache = ResolverCache::new();
+        assert!(cache.get(Some("8.8.8.8")).is_ok());
+        assert_eq!(cache.default_key, DEFAULT_DNS);
     }
 }

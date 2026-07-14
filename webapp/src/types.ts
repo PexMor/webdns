@@ -10,6 +10,10 @@ export interface RecordTypeHelpEntry {
   title: string;
   description: string;
   example: string | null;
+  /** For record types with a lookup-convention transform (see
+   *  `queryTransforms.ts`): a worked example of the human-friendly input and
+   *  the query name it resolves to. */
+  transformExample?: { input: string; queryName: string };
 }
 
 /** A single per-record-type result from the backend. */
@@ -75,21 +79,39 @@ export interface RuntimeConfig {
   identityProxy: IdentityProxyConfig;
 }
 
-export interface LookupFormState {
+/** Extra input state for record types whose query name is constructed from a
+ *  lookup convention (see `queryTransforms.ts`) rather than the domain field
+ *  alone. All optional/defaulted so older persisted records without them
+ *  reproduce today's "no convention engaged" behavior. */
+export interface ConventionFormState {
+  enumMode?: boolean;
+  srvFields?: { service: string; protocol: string };
+  tlsaFields?: { port: string; transport: string };
+}
+
+export interface LookupFormState extends ConventionFormState {
   domain: string;
   recordTypes: RecordType[];
 }
 
-export interface LookupHistoryEntry {
+export interface LookupHistoryEntry extends ConventionFormState {
   id?: number;
   domain: string;
   recordTypes: RecordType[];
   dnsServerAddress: string;
   dnsServerResolved: string;
   timestamp: string;
+  /** Per-record-type results as returned by the backend at the time this
+   *  entry was recorded, so History can show what was found without
+   *  re-running the query. Absent for entries recorded before this field
+   *  existed, or when the query didn't get a response at all. */
+  results?: DnsRecordResult[];
+  /** Set instead of `results` when the query failed outright (no response),
+   *  e.g. a connection error. */
+  responseError?: string;
 }
 
-export interface QuickLookup {
+export interface QuickLookup extends ConventionFormState {
   id: string;
   name: string;
   domain: string;
@@ -99,7 +121,7 @@ export interface QuickLookup {
   sortOrder: number;
 }
 
-export interface QuickLookupInput {
+export interface QuickLookupInput extends ConventionFormState {
   name: string;
   domain: string;
   recordTypes: RecordType[];

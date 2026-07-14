@@ -1,6 +1,7 @@
 use clap::Parser;
 use serde::Deserialize;
 use std::fmt;
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser, Debug)]
@@ -28,6 +29,14 @@ pub struct Cli {
     /// Disable static web serving; only `/ws` and `/version` remain.
     #[arg(long = "no-serve-web")]
     pub no_serve_web: bool,
+
+    /// Restrict per-request `dns_server` to the configured allowlist.
+    #[arg(long)]
+    pub secure_mode: bool,
+
+    /// Upstream DNS server permitted in secure mode (repeatable).
+    #[arg(long = "allowed-dns-server", action = clap::ArgAction::Append)]
+    pub allowed_dns_servers: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -38,6 +47,8 @@ struct FileConfig {
     port: Option<u16>,
     web_root: Option<PathBuf>,
     serve_web: Option<bool>,
+    secure_mode: Option<bool>,
+    allowed_dns_servers: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,6 +130,8 @@ pub struct AppConfig {
     pub bind: String,
     pub web_root: PathBuf,
     pub serve_web: bool,
+    pub secure_mode: bool,
+    pub allowed_dns_servers: Vec<IpAddr>,
     pub report: ConfigReport,
 }
 
@@ -159,6 +172,52 @@ fn env_web_root() -> Option<PathBuf> {
 
 fn env_serve_web() -> Option<bool> {
     env_var("DNS_SERVE_WEB").and_then(parse_bool)
+}
+
+fn env_secure_mode() -> Option<bool> {
+    env_var("DNS_SECURE_MODE").and_then(parse_bool)
+}
+
+fn split_csv_trimmed(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn env_allowed_dns_servers() -> Option<Vec<String>> {
+    env_var("DNS_ALLOWED_DNS_SERVERS").map(|value| split_csv_trimmed(&value))
+}
+
+fn parse_ip_list(entries: &[String]) -> Result<Vec<IpAddr>, config::ConfigError> {
+    entries
+        .iter()
+        .map(|entry| {
+            entry.parse::<IpAddr>().map_err(|_| {
+                tracing::error!("allowed_dns_servers: invalid IP address \"{entry}\"");
+                config::ConfigError::Message(format!(
+                    "allowed_dns_servers: invalid IP address \"{entry}\""
+                ))
+            })
+        })
+        .collect()
+}
+
+fn require_allowed_servers_when_secure(
+    secure_mode: bool,
+    allowed_dns_servers: &[IpAddr],
+) -> Result<(), config::ConfigError> {
+    if secure_mode && allowed_dns_servers.is_empty() {
+        tracing::error!(
+            "secure_mode is enabled but allowed_dns_servers is empty; at least one allowed DNS server is required"
+        );
+        return Err(config::ConfigError::Message(
+            "secure_mode requires at least one entry in allowed_dns_servers".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn parse_bool(value: String) -> Option<bool> {
@@ -240,6 +299,40 @@ fn resolve_bool(
     }
 
     let (source, value) = winner.unwrap_or((ConfigSource::Default, default));
+    Resolved {
+        value,
+        source,
+        overridden,
+    }
+}
+
+fn resolve_list(
+    cli: Vec<String>,
+    env: Option<Vec<String>>,
+    file: Option<Vec<String>>,
+) -> Resolved<Vec<String>> {
+    let candidates = [
+        (ConfigSource::Cli, (!cli.is_empty()).then_some(cli)),
+        (ConfigSource::Environment, env),
+        (ConfigSource::File, file),
+    ];
+
+    let mut winner = None;
+    let mut overridden = Vec::new();
+
+    for (source, value) in candidates {
+        let Some(value) = value else {
+            continue;
+        };
+
+        if winner.is_some() {
+            overridden.push((source, value.join(",")));
+        } else {
+            winner = Some((source, value));
+        }
+    }
+
+    let (source, value) = winner.unwrap_or((ConfigSource::Default, Vec::new()));
     Resolved {
         value,
         source,
@@ -464,6 +557,33 @@ impl AppConfig {
             );
         }
 
+        let secure_mode = resolve_bool(
+            if cli.secure_mode { Some(true) } else { None },
+            env_secure_mode(),
+            file.secure_mode,
+            false,
+        );
+        log_resolved(&secure_mode, "secure_mode", false);
+
+        let allowed_dns_servers_raw = resolve_list(
+            cli.allowed_dns_servers.clone(),
+            env_allowed_dns_servers(),
+            file.allowed_dns_servers.clone(),
+        );
+
+        let allowed_dns_servers = parse_ip_list(&allowed_dns_servers_raw.value)?;
+        tracing::info!(
+            "allowed_dns_servers = [{}] (source: {})",
+            allowed_dns_servers
+                .iter()
+                .map(|ip| ip.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            allowed_dns_servers_raw.source.label()
+        );
+
+        require_allowed_servers_when_secure(secure_mode.value, &allowed_dns_servers)?;
+
         let effective_bind = bind_override
             .as_ref()
             .map(|bind| bind.value.clone())
@@ -497,7 +617,59 @@ impl AppConfig {
             bind: effective_bind,
             web_root: web_root.value,
             serve_web: serve_web.value,
+            secure_mode: secure_mode.value,
+            allowed_dns_servers,
             report,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_csv_trimmed_drops_blanks_and_trims_whitespace() {
+        assert_eq!(
+            split_csv_trimmed(" 9.9.9.9 , 1.1.1.1,, 8.8.8.8 "),
+            vec!["9.9.9.9", "1.1.1.1", "8.8.8.8"]
+        );
+    }
+
+    #[test]
+    fn parse_ip_list_accepts_valid_addresses() {
+        let entries = vec!["9.9.9.9".to_string(), "::1".to_string()];
+        let parsed = parse_ip_list(&entries).unwrap();
+        assert_eq!(
+            parsed,
+            vec![
+                "9.9.9.9".parse::<IpAddr>().unwrap(),
+                "::1".parse::<IpAddr>().unwrap()
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_ip_list_rejects_invalid_address() {
+        let entries = vec!["not-an-ip".to_string()];
+        let err = parse_ip_list(&entries).unwrap_err();
+        assert!(err.to_string().contains("not-an-ip"));
+    }
+
+    #[test]
+    fn require_allowed_servers_when_secure_fails_on_empty_list() {
+        let err = require_allowed_servers_when_secure(true, &[]).unwrap_err();
+        assert!(err.to_string().contains("allowed_dns_servers"));
+    }
+
+    #[test]
+    fn require_allowed_servers_when_secure_passes_with_entries() {
+        let allowed = vec!["9.9.9.9".parse().unwrap()];
+        assert!(require_allowed_servers_when_secure(true, &allowed).is_ok());
+    }
+
+    #[test]
+    fn require_allowed_servers_when_secure_ignored_when_disabled() {
+        assert!(require_allowed_servers_when_secure(false, &[]).is_ok());
     }
 }

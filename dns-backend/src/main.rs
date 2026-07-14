@@ -23,7 +23,8 @@ async fn main() {
     let bind_addr = config.bind.clone();
     let serve_web = config.serve_web;
     let web_root = config.web_root.clone();
-    let resolvers = ResolverCache::new();
+    let resolvers =
+        ResolverCache::with_secure_mode(config.secure_mode, config.allowed_dns_servers.clone());
     let state = Arc::new(AppState { config, resolvers });
 
     let mut app = Router::new()

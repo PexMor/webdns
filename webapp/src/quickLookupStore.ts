@@ -1,4 +1,5 @@
 import { STORES, runStore } from "./webdnsDb";
+import { DEFAULT_SRV_FIELDS, DEFAULT_TLSA_FIELDS } from "./queryTransforms";
 import type { QuickLookup, QuickLookupInput } from "./types";
 
 function newId(): string {
@@ -43,6 +44,9 @@ export function normalizeQuickLookup(record: QuickLookup): QuickLookup {
     ...record,
     includeDnsServer,
     dnsServerAddress: includeDnsServer ? record.dnsServerAddress ?? null : null,
+    enumMode: record.enumMode === true,
+    srvFields: record.srvFields ?? { ...DEFAULT_SRV_FIELDS },
+    tlsaFields: record.tlsaFields ?? { ...DEFAULT_TLSA_FIELDS },
   };
 }
 
@@ -57,6 +61,9 @@ export async function addQuickLookup({
   recordTypes,
   includeDnsServer = false,
   dnsServerAddress = null,
+  enumMode = false,
+  srvFields = DEFAULT_SRV_FIELDS,
+  tlsaFields = DEFAULT_TLSA_FIELDS,
 }: QuickLookupInput): Promise<QuickLookup> {
   const existing = await listQuickLookups();
   const include = Boolean(includeDnsServer);
@@ -67,6 +74,9 @@ export async function addQuickLookup({
     recordTypes: [...recordTypes],
     includeDnsServer: include,
     dnsServerAddress: include ? dnsServerAddress ?? null : null,
+    enumMode,
+    srvFields,
+    tlsaFields,
     sortOrder: nextSortOrder(existing),
   });
 
@@ -168,6 +178,9 @@ export async function importQuickLookups(
         recordTypes: [...recordTypes],
         includeDnsServer,
         dnsServerAddress,
+        enumMode: entry?.enumMode,
+        srvFields: entry?.srvFields,
+        tlsaFields: entry?.tlsaFields,
         sortOrder,
       });
       store.put(record);
@@ -184,15 +197,23 @@ export async function exportQuickLookups(): Promise<
   Array<
     Pick<QuickLookup, "name" | "domain" | "recordTypes" | "includeDnsServer"> & {
       dnsServerAddress?: string | null;
+      enumMode?: boolean;
+      srvFields?: { service: string; protocol: string };
+      tlsaFields?: { port: string; transport: string };
     }
   >
 > {
   const items = await listQuickLookups();
-  return items.map(({ name, domain, recordTypes, includeDnsServer, dnsServerAddress }) => ({
-    name,
-    domain,
-    recordTypes,
-    includeDnsServer,
-    ...(includeDnsServer && dnsServerAddress ? { dnsServerAddress } : {}),
-  }));
+  return items.map(
+    ({ name, domain, recordTypes, includeDnsServer, dnsServerAddress, enumMode, srvFields, tlsaFields }) => ({
+      name,
+      domain,
+      recordTypes,
+      includeDnsServer,
+      ...(includeDnsServer && dnsServerAddress ? { dnsServerAddress } : {}),
+      ...(enumMode ? { enumMode } : {}),
+      ...(srvFields && (srvFields.service || srvFields.protocol) ? { srvFields } : {}),
+      ...(tlsaFields && (tlsaFields.port || tlsaFields.transport) ? { tlsaFields } : {}),
+    })
+  );
 }

@@ -7,3 +7,8 @@ port = 8080
 
 # Set to false to expose only /ws and /version (no static files).
 # serve_web = false
+
+# When true, only dns_server values present in allowed_dns_servers may be used;
+# any other client-requested server is rejected with an error response.
+# secure_mode = true
+# allowed_dns_servers = ["1.1.1.1", "9.9.9.9"]

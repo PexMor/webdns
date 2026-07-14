@@ -13,6 +13,8 @@ import {
 } from "./dnsServerStore";
 import {
   clearHistory,
+  exportHistory,
+  importHistory,
   listHistory,
   suggestQuickLookupName,
 } from "./lookupHistoryStore";
@@ -46,6 +48,9 @@ export interface LookupSetup {
   recordTypes: string[];
   includeDnsServer?: boolean;
   dnsServerAddress?: string | null;
+  enumMode?: boolean;
+  srvFields?: { service: string; protocol: string };
+  tlsaFields?: { port: string; transport: string };
   overrideSource?: string | null;
   overrideName?: string | null;
   autoExecute?: boolean;
@@ -56,10 +61,48 @@ function maskHeaderValue(value: string): string {
   return "••••••";
 }
 
-function formatHistoryTime(timestamp: string): string {
+export function formatHistoryTime(timestamp: string): string {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
   return date.toLocaleString();
+}
+
+/** Accepts either a JSON array (one file) or NDJSON/JSONL text (one JSON
+ *  object per line) and returns a flat array of raw values ready for
+ *  `importHistory`. Lines that fail to parse become `null`, which
+ *  `importHistory` counts as skipped rather than throwing. */
+function parseImportedHistoryText(text: string): unknown[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+    // Not a single JSON array — fall through to NDJSON/JSONL parsing below.
+  }
+
+  return trimmed
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    });
+}
+
+function downloadTextFile(content: string, filename: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function dnsServerLabel(address: string, dnsOptions: DnsServerOption[]): string {
@@ -81,9 +124,13 @@ export interface MenuProps {
   quickLookups: QuickLookup[];
   onQuickLookupsChange: (items: QuickLookup[]) => void;
   onRunLookupSetup: (setup: LookupSetup) => void;
+  onViewHistoryEntry: (entry: LookupHistoryEntry) => void;
   currentDomain: string;
   currentRecordTypes: string[];
   currentDnsServerAddress: string;
+  currentEnumMode: boolean;
+  currentSrvFields: { service: string; protocol: string };
+  currentTlsaFields: { port: string; transport: string };
   wsUrls: string[];
   selectedWsUrl: string;
   httpServerUrl: string;
@@ -108,6 +155,8 @@ export interface MenuProps {
   onRrDetailLevelChange: (level: string) => void;
   rrDefaultViewMode: RrViewMode;
   onRrDefaultViewModeChange: (mode: string) => void;
+  autoFoldRecordTypes: boolean;
+  onAutoFoldRecordTypesChange: (value: boolean) => void;
 }
 
 export function Menu({
@@ -118,9 +167,13 @@ export function Menu({
   quickLookups,
   onQuickLookupsChange,
   onRunLookupSetup,
+  onViewHistoryEntry,
   currentDomain,
   currentRecordTypes,
   currentDnsServerAddress,
+  currentEnumMode,
+  currentSrvFields,
+  currentTlsaFields,
   wsUrls,
   selectedWsUrl,
   httpServerUrl,
@@ -145,6 +198,8 @@ export function Menu({
   onRrDetailLevelChange,
   rrDefaultViewMode,
   onRrDefaultViewModeChange,
+  autoFoldRecordTypes,
+  onAutoFoldRecordTypesChange,
 }: MenuProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -197,6 +252,9 @@ export function Menu({
                     recordTypes: preset.recordTypes,
                     includeDnsServer: preset.includeDnsServer,
                     dnsServerAddress: preset.dnsServerAddress,
+                    enumMode: preset.enumMode,
+                    srvFields: preset.srvFields,
+                    tlsaFields: preset.tlsaFields,
                     overrideSource: "quick-lookup",
                     overrideName: preset.name,
                   })
@@ -254,6 +312,8 @@ export function Menu({
             onRrDetailLevelChange={onRrDetailLevelChange}
             rrDefaultViewMode={rrDefaultViewMode}
             onRrDefaultViewModeChange={onRrDefaultViewModeChange}
+            autoFoldRecordTypes={autoFoldRecordTypes}
+            onAutoFoldRecordTypesChange={onAutoFoldRecordTypesChange}
             onCustomServersChange={onCustomServersChange}
             onBack={() => onOpenPanel(null)}
           />
@@ -263,6 +323,7 @@ export function Menu({
           <HistoryPanel
             onRunLookupSetup={onRunLookupSetup}
             onQuickLookupsChange={onQuickLookupsChange}
+            onViewHistoryEntry={onViewHistoryEntry}
             onBack={() => onOpenPanel(null)}
           />
         )}
@@ -274,6 +335,9 @@ export function Menu({
             currentDomain={currentDomain}
             currentRecordTypes={currentRecordTypes}
             currentDnsServerAddress={currentDnsServerAddress}
+            currentEnumMode={currentEnumMode}
+            currentSrvFields={currentSrvFields}
+            currentTlsaFields={currentTlsaFields}
             dnsOptions={dnsOptions}
             onBack={() => onOpenPanel(null)}
           />
@@ -309,6 +373,8 @@ interface SettingsPanelProps {
   onRrDetailLevelChange: (level: string) => void;
   rrDefaultViewMode: RrViewMode;
   onRrDefaultViewModeChange: (mode: string) => void;
+  autoFoldRecordTypes: boolean;
+  onAutoFoldRecordTypesChange: (value: boolean) => void;
   onCustomServersChange: (servers: CustomDnsServer[]) => void;
   onBack: () => void;
 }
@@ -337,6 +403,8 @@ function SettingsPanel({
   onRrDetailLevelChange,
   rrDefaultViewMode,
   onRrDefaultViewModeChange,
+  autoFoldRecordTypes,
+  onAutoFoldRecordTypesChange,
   onCustomServersChange,
   onBack,
 }: SettingsPanelProps) {
@@ -591,6 +659,20 @@ function SettingsPanel({
         How much inline guidance parsed record fields show, in lookup results and record-type help.
       </p>
 
+      <label class="quick-lookup-option">
+        <input
+          type="checkbox"
+          checked={autoFoldRecordTypes}
+          onChange={(e) => onAutoFoldRecordTypesChange((e.currentTarget as HTMLInputElement).checked)}
+        />
+        Collapse record types while a query runs
+      </label>
+      <p class="menu-hint">
+        When enabled, the record type selection collapses to a summary once you submit a lookup
+        (during the query and after results appear), so results have more room. Click "Change" to
+        expand it again.
+      </p>
+
       <label for="http-server-url">Server URL (HTTP/HTTPS)</label>
       <input
         id="http-server-url"
@@ -809,14 +891,21 @@ function SettingsPanel({
 interface HistoryPanelProps {
   onRunLookupSetup: (setup: LookupSetup) => void;
   onQuickLookupsChange: (items: QuickLookup[]) => void;
+  onViewHistoryEntry: (entry: LookupHistoryEntry) => void;
   onBack: () => void;
 }
 
-function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, onBack }: HistoryPanelProps) {
+function HistoryPanel({
+  onRunLookupSetup,
+  onQuickLookupsChange,
+  onViewHistoryEntry,
+  onBack,
+}: HistoryPanelProps) {
   const [entries, setEntries] = useState<LookupHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -845,6 +934,40 @@ function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, onBack }: Histor
     setMessage("History cleared.");
   }
 
+  async function handleExportJson() {
+    const data = await exportHistory();
+    downloadTextFile(JSON.stringify(data, null, 2), "lookup-history.json", "application/json");
+    setMessage(`Exported ${data.length} history entr${data.length === 1 ? "y" : "ies"} as JSON.`);
+  }
+
+  async function handleExportJsonl() {
+    const data = await exportHistory();
+    const text = data.map((entry) => JSON.stringify(entry)).join("\n");
+    downloadTextFile(text, "lookup-history.jsonl", "application/x-ndjson");
+    setMessage(`Exported ${data.length} history entr${data.length === 1 ? "y" : "ies"} as JSONL.`);
+  }
+
+  async function handleImport(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+
+    setError(null);
+    setMessage(null);
+
+    try {
+      const text = await file.text();
+      const rawEntries = parseImportedHistoryText(text);
+      const { added, skipped } = await importHistory(rawEntries);
+      setMessage(`Import complete: ${added} added, ${skipped} skipped.`);
+      const items = await listHistory();
+      setEntries(items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid import file.");
+    }
+  }
+
   async function handleSaveAsQuickLookup(entry: LookupHistoryEntry) {
     const defaultName = suggestQuickLookupName(entry.domain, entry.recordTypes);
     const name = window.prompt("Quick lookup name:", defaultName);
@@ -863,6 +986,9 @@ function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, onBack }: Histor
         recordTypes: entry.recordTypes,
         includeDnsServer,
         dnsServerAddress: includeDnsServer ? entry.dnsServerAddress : null,
+        enumMode: entry.enumMode,
+        srvFields: entry.srvFields,
+        tlsaFields: entry.tlsaFields,
       });
       const presets = await listQuickLookups();
       onQuickLookupsChange(presets);
@@ -896,6 +1022,9 @@ function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, onBack }: Histor
                     recordTypes: entry.recordTypes,
                     includeDnsServer: true,
                     dnsServerAddress: entry.dnsServerAddress,
+                    enumMode: entry.enumMode,
+                    srvFields: entry.srvFields,
+                    tlsaFields: entry.tlsaFields,
                     overrideSource: "history",
                   })
                 }
@@ -905,6 +1034,13 @@ function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, onBack }: Histor
                   {entry.recordTypes.join(", ")} · {entry.dnsServerResolved} ·{" "}
                   {formatHistoryTime(entry.timestamp)}
                 </span>
+              </button>
+              <button
+                type="button"
+                class="history-list__view"
+                onClick={() => onViewHistoryEntry(entry)}
+              >
+                View results
               </button>
               <button
                 type="button"
@@ -924,6 +1060,31 @@ function HistoryPanel({ onRunLookupSetup, onQuickLookupsChange, onBack }: Histor
         </button>
       )}
 
+      <hr class="menu-divider" />
+
+      <div class="menu-row">
+        <button type="button" onClick={() => fileInputRef.current?.click()}>
+          Import
+        </button>
+        <button type="button" onClick={handleExportJson} disabled={entries.length === 0}>
+          Export JSON
+        </button>
+        <button type="button" onClick={handleExportJsonl} disabled={entries.length === 0}>
+          Export JSONL
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json,.jsonl,.ndjson"
+          hidden
+          onChange={handleImport}
+        />
+      </div>
+      <p class="menu-hint">
+        Export as a single JSON array or as JSONL/NDJSON (one entry per line). Import accepts
+        either format automatically.
+      </p>
+
       {message && <p class="menu-message">{message}</p>}
       {error && <p class="menu-error">{error}</p>}
     </div>
@@ -936,6 +1097,9 @@ interface QuickLookupsPanelProps {
   currentDomain: string;
   currentRecordTypes: string[];
   currentDnsServerAddress: string;
+  currentEnumMode: boolean;
+  currentSrvFields: { service: string; protocol: string };
+  currentTlsaFields: { port: string; transport: string };
   dnsOptions: DnsServerOption[];
   onBack: () => void;
 }
@@ -946,6 +1110,9 @@ function QuickLookupsPanel({
   currentDomain,
   currentRecordTypes,
   currentDnsServerAddress,
+  currentEnumMode,
+  currentSrvFields,
+  currentTlsaFields,
   dnsOptions,
   onBack,
 }: QuickLookupsPanelProps) {
@@ -989,6 +1156,9 @@ function QuickLookupsPanel({
       recordTypes: currentRecordTypes,
       includeDnsServer,
       dnsServerAddress: includeDnsServer ? currentDnsServerAddress : null,
+      enumMode: currentEnumMode,
+      srvFields: currentSrvFields,
+      tlsaFields: currentTlsaFields,
     });
     setName("");
     setMessage(`Saved quick lookup "${presetName}".`);

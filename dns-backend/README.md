@@ -58,6 +58,32 @@ From the project root, `make backend` builds the webapp, compiles the release bi
 
 `api_key` is required from at least one source; the server fails to start with a clear error if it's missing everywhere.
 
+### Secure mode (DNS server allowlist)
+
+By default, clients may request any syntactically valid IP address as the upstream `dns_server` for a query. To restrict the server to a fixed, trusted set of upstream resolvers, enable `secure_mode` and provide `allowed_dns_servers`:
+
+```toml
+secure_mode = true
+allowed_dns_servers = ["1.1.1.1", "9.9.9.9"]
+```
+
+Or via environment variables:
+
+```
+DNS_SECURE_MODE=true DNS_ALLOWED_DNS_SERVERS="1.1.1.1,9.9.9.9" cargo run
+```
+
+Or via CLI flags:
+
+```
+cargo run -- --secure-mode --allowed-dns-server 1.1.1.1 --allowed-dns-server 9.9.9.9
+```
+
+When `secure_mode` is enabled:
+- A request whose `dns_server` is not in `allowed_dns_servers` is rejected with a JSON error response (the WebSocket connection stays open); the server never silently falls back to a different resolver.
+- A request with no `dns_server` field uses the first entry of `allowed_dns_servers` as the default, instead of `1.1.1.1`.
+- The server fails to start if `secure_mode` is enabled but `allowed_dns_servers` is empty, or contains a value that isn't a valid IP address.
+
 ## Using the app
 
 1. Build the web client and start the server (see above).

@@ -50,12 +50,14 @@ export const RECORD_TYPE_HELP: Record<string, RecordTypeHelpEntry> = {
     description:
       "Maps an IP address back to a hostname (reverse DNS). Often used by mail servers to verify sending hosts and in network troubleshooting.",
     example: "34.216.184.93.in-addr.arpa.  3600  IN  PTR  www.example.com.",
+    transformExample: { input: "8.8.4.4", queryName: "4.4.8.8.in-addr.arpa" },
   },
   SRV: {
     title: "SRV record",
     description:
       "Locates a service by hostname and port within a domain. Used for protocols like SIP, XMPP, LDAP, and Microsoft Active Directory services.",
     example: "_xmpp-server._tcp.example.com.  3600  IN  SRV  10 5 5269 xmpp.example.com.",
+    transformExample: { input: "sip + tcp + example.com", queryName: "_sip._tcp.example.com" },
   },
   HTTPS: {
     title: "HTTPS record",
@@ -75,6 +77,10 @@ export const RECORD_TYPE_HELP: Record<string, RecordTypeHelpEntry> = {
       "Naming Authority Pointer — guides clients to the right service or URI for a name. Used in ENUM (E.164 telephone number mapping) and some VoIP routing setups.",
     example:
       '1.2.3.4.5.6.7.8.9.0.example.com.  3600  IN  NAPTR  100 10 "u" "E2U+sip" "!^.*$!sip:alice@example.com!" .',
+    transformExample: {
+      input: "+1-800-555-1234 (ENUM mode)",
+      queryName: "4.3.2.1.5.5.5.0.0.8.1.e164.arpa",
+    },
   },
   CAA: {
     title: "CAA record",
@@ -87,6 +93,7 @@ export const RECORD_TYPE_HELP: Record<string, RecordTypeHelpEntry> = {
     description:
       "Associates a TLS certificate or public key with a domain for DANE, allowing clients to validate HTTPS certificates using DNSSEC instead of only public CAs.",
     example: "_443._tcp.example.com.  3600  IN  TLSA  3 1 1 2BBFFDE4C0C76A8D66B3305A1D0DB05B263A70FD",
+    transformExample: { input: "https://example.com", queryName: "_443._tcp.example.com" },
   },
   SSHFP: {
     title: "SSHFP record",
@@ -105,12 +112,20 @@ export const RECORD_TYPE_HELP: Record<string, RecordTypeHelpEntry> = {
     description:
       "Publishes OpenPGP public keys for an email address or domain, helping mail clients discover keys for encryption and signature verification.",
     example: "alice._openpgpkey.example.com.  3600  IN  OPENPGPKEY  ( mQENBGKx...base64... )",
+    transformExample: {
+      input: "hugh@example.com",
+      queryName: "c93f1e400f26708f98cb19d936620da35eec8f72e57f9eec01c1afd6._openpgpkey.example.com",
+    },
   },
   SMIMEA: {
     title: "SMIMEA record",
     description:
       "Associates S/MIME certificates with an email address (DANE for S/MIME), enabling clients to validate encrypted-email certificates via DNSSEC.",
     example: "alice._smimecert.example.com.  3600  IN  SMIMEA  3 1 1 A1B2C3D4E5F6789012345678901234567890ABCD",
+    transformExample: {
+      input: "hugh@example.com",
+      queryName: "c93f1e400f26708f98cb19d936620da35eec8f72e57f9eec01c1afd6._smimecert.example.com",
+    },
   },
   DNSKEY: {
     title: "DNSKEY record",

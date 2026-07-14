@@ -25,16 +25,40 @@ import {
 import type { DetailLevel } from "./rr";
 import { addHistoryEntry } from "./lookupHistoryStore";
 import { getLookupForm, saveLookupForm } from "./lookupFormStore";
+import { initAutoFoldRecordTypes, setAutoFoldRecordTypes } from "./queryFormPrefsStore";
 import { listQuickLookups } from "./quickLookupStore";
 import { listWsHeaders, migrateLegacyApiKey } from "./wsHeaderStore";
-import { Menu, type LookupSetup, type MenuPanel } from "./menu";
+import { Menu, formatHistoryTime, type LookupSetup, type MenuPanel } from "./menu";
 import { useDnsSocket } from "./useDnsSocket";
-import { RECORD_TYPE_GROUPS } from "./recordTypes";
+import {
+  RECORD_TYPE_CONVENTION,
+  RECORD_TYPE_GROUPS,
+  conventionTooltip,
+  recordTypeForConvention,
+} from "./recordTypes";
 import { RecordResultCard } from "./RecordResultCard";
 import { RecordTypeHelpModal } from "./RecordTypeHelpModal";
+import { QueryInputPreview } from "./QueryInputPreview";
+import { SrvFieldsInput, TlsaFieldsInput } from "./SrvTlsaFields";
+import {
+  DEFAULT_SRV_FIELDS,
+  DEFAULT_TLSA_FIELDS,
+  engagedConvention,
+  transformQueryInput,
+  type SrvFields,
+  type TlsaFields,
+  type TransformResult,
+} from "./queryTransforms";
 import { AuthExpiredOverlay } from "./AuthExpiredOverlay";
 import { humanizeRequestError } from "./formatRecordResult";
-import type { CustomDnsServer, DnsServerOption, QuickLookup, RuntimeConfig, WsHeader } from "./types";
+import type {
+  CustomDnsServer,
+  DnsServerOption,
+  LookupHistoryEntry,
+  QuickLookup,
+  RuntimeConfig,
+  WsHeader,
+} from "./types";
 
 const DEFAULT_SELECTED = new Set(["A", "AAAA"]);
 
@@ -52,6 +76,14 @@ interface PendingExecute {
   recordTypes: string[];
   dnsServerAddress: string;
   dnsServerResolved: string;
+  enumMode: boolean;
+  srvFields: SrvFields;
+  tlsaFields: TlsaFields;
+}
+
+interface ExecuteLookupResult {
+  sent: boolean;
+  error?: string;
 }
 
 export function App() {
@@ -71,13 +103,20 @@ export function App() {
   const [helpExampleWrap, setHelpExampleWrap] = useState<HelpExampleWrapMode>("nowrap");
   const [rrDetailLevel, setRrDetailLevelState] = useState<DetailLevel>("standard");
   const [rrDefaultViewMode, setRrDefaultViewModeState] = useState<RrViewMode>("parsed");
+  const [autoFoldRecordTypes, setAutoFoldRecordTypesState] = useState(false);
+  const [recordTypesFolded, setRecordTypesFolded] = useState(false);
 
   const [domain, setDomain] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(DEFAULT_SELECTED);
+  const [enumMode, setEnumMode] = useState(false);
+  const [srvFields, setSrvFields] = useState<SrvFields>(DEFAULT_SRV_FIELDS);
+  const [tlsaFields, setTlsaFields] = useState<TlsaFields>(DEFAULT_TLSA_FIELDS);
+  const [previewResult, setPreviewResult] = useState<TransformResult | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [helpRecordType, setHelpRecordType] = useState<string | null>(null);
   const [dnsOverrideNotice, setDnsOverrideNotice] = useState<DnsOverrideNotice | null>(null);
   const [pendingExecute, setPendingExecute] = useState<PendingExecute | null>(null);
+  const [viewingHistoryEntry, setViewingHistoryEntry] = useState<LookupHistoryEntry | null>(null);
 
   const pendingHistoryRef = useRef<PendingExecute | null>(null);
 
@@ -104,6 +143,51 @@ export function App() {
     return match?.resolvedAddress ?? resolveDnsAddress(selectedDnsAddress, effectiveWsUrl);
   }, [dnsOptions, selectedDnsAddress, effectiveWsUrl]);
 
+  const engagedConventionId = useMemo(
+    () =>
+      engagedConvention({
+        recordTypes: Array.from(selectedTypes),
+        domain,
+        enumMode,
+        srvFields,
+        tlsaFields,
+      }),
+    [selectedTypes, domain, enumMode, srvFields, tlsaFields]
+  );
+
+  const engagedRecordType = useMemo(
+    () => (engagedConventionId ? recordTypeForConvention(engagedConventionId) : null),
+    [engagedConventionId]
+  );
+
+  // Types other than the engaged one that must be deselected before submitting
+  // (already-checked selections are never silently cleared — see design.md).
+  const blockingTypes = useMemo(
+    () =>
+      engagedRecordType
+        ? Array.from(selectedTypes).filter((type) => type !== engagedRecordType)
+        : [],
+    [engagedRecordType, selectedTypes]
+  );
+
+  function isRecordTypeCheckboxDisabled(type: string): boolean {
+    if (!engagedConventionId || type === engagedRecordType) return false;
+    // Still allow unchecking an already-selected incompatible type.
+    return !selectedTypes.has(type);
+  }
+
+  function recordTypeTitle(type: string): string | undefined {
+    if (isRecordTypeCheckboxDisabled(type)) {
+      return `Disabled — ${engagedRecordType} is using a transformed query right now. Uncheck it or clear its input to select ${type}.`;
+    }
+    return conventionTooltip(type) ?? undefined;
+  }
+
+  // Reported live by QueryInputPreview as the engaged convention's input is
+  // (in)validated, so submission can be blocked proactively rather than only
+  // after a failed submit attempt.
+  const previewError = previewResult && "error" in previewResult ? previewResult.error : null;
+
   const { status, statusLabel, hasApiKey, response, errorMessage, saveApiKey, saveConnectionHeaders, query } =
     useDnsSocket(effectiveWsUrl, {
       connectionHeaders,
@@ -117,6 +201,7 @@ export function App() {
       const theme = await initTheme();
       const exampleWrap = await initHelpExampleWrap();
       const rrViewPrefs = await initRrViewPrefs();
+      const foldRecordTypes = await initAutoFoldRecordTypes();
       const loaded = await loadConfig();
       const custom = await listCustomServers();
       const presets = await listQuickLookups();
@@ -138,11 +223,15 @@ export function App() {
       setHelpExampleWrap(exampleWrap);
       setRrDetailLevelState(rrViewPrefs.detailLevel);
       setRrDefaultViewModeState(rrViewPrefs.defaultViewMode);
+      setAutoFoldRecordTypesState(foldRecordTypes);
       setHttpServerUrl(httpUrl);
       setSelectedWsUrl(wsUrl);
       setSelectedDnsAddress(dnsAddress);
       setDomain(savedForm.domain);
       setSelectedTypes(new Set(savedForm.recordTypes));
+      setEnumMode(savedForm.enumMode ?? false);
+      setSrvFields(savedForm.srvFields ?? DEFAULT_SRV_FIELDS);
+      setTlsaFields(savedForm.tlsaFields ?? DEFAULT_TLSA_FIELDS);
       setReady(true);
     }
 
@@ -155,10 +244,13 @@ export function App() {
     saveLookupForm({
       domain,
       recordTypes: Array.from(selectedTypes),
+      enumMode,
+      srvFields,
+      tlsaFields,
     }).catch((err) => {
       console.error("[form] failed to save lookup form", err);
     });
-  }, [domain, selectedTypes, ready]);
+  }, [domain, selectedTypes, enumMode, srvFields, tlsaFields, ready]);
 
   useEffect(() => {
     if (!ready || !dnsOptions.length) return;
@@ -176,7 +268,11 @@ export function App() {
 
     const entry = pendingHistoryRef.current;
     pendingHistoryRef.current = null;
-    addHistoryEntry(entry).catch((err) => {
+    addHistoryEntry({
+      ...entry,
+      results: response?.results,
+      responseError: response ? undefined : errorMessage ?? undefined,
+    }).catch((err) => {
       console.error("[history] failed to save entry", err);
     });
   }, [response, errorMessage]);
@@ -204,16 +300,21 @@ export function App() {
       match?.resolvedAddress ??
       resolveDnsAddress(dnsAddr, effectiveWsUrl);
 
-    const sent = executeLookup({
+    executeLookup({
       domain: pendingExecute.domain,
       recordTypes,
       dnsServerAddress: dnsAddr,
       dnsServerResolved: resolved,
+      enumMode: pendingExecute.enumMode,
+      srvFields: pendingExecute.srvFields,
+      tlsaFields: pendingExecute.tlsaFields,
+    }).then(({ sent, error }) => {
+      if (error) {
+        setFormError(error);
+      } else if (!sent) {
+        setFormError("Not connected to the server.");
+      }
     });
-
-    if (!sent) {
-      setFormError("Not connected to the server.");
-    }
 
     setPendingExecute(null);
   }, [pendingExecute, status, dnsOptions, effectiveWsUrl]);
@@ -229,6 +330,9 @@ export function App() {
     recordTypes,
     dnsServerAddress,
     includeDnsServer = false,
+    enumMode: nextEnumMode = false,
+    srvFields: nextSrvFields = DEFAULT_SRV_FIELDS,
+    tlsaFields: nextTlsaFields = DEFAULT_TLSA_FIELDS,
     overrideSource = null,
     overrideName = null,
     autoExecute = false,
@@ -236,6 +340,9 @@ export function App() {
     setFormError(null);
     setDomain(nextDomain);
     setSelectedTypes(new Set(recordTypes));
+    setEnumMode(nextEnumMode);
+    setSrvFields(nextSrvFields);
+    setTlsaFields(nextTlsaFields);
 
     let dnsAddr = selectedDnsAddress;
 
@@ -268,27 +375,51 @@ export function App() {
         recordTypes: [...recordTypes],
         dnsServerAddress: dnsAddr,
         dnsServerResolved: resolved,
+        enumMode: nextEnumMode,
+        srvFields: nextSrvFields,
+        tlsaFields: nextTlsaFields,
       });
     }
   }
 
-  function executeLookup({
+  async function executeLookup({
     domain: queryDomain,
     recordTypes,
     dnsServerAddress,
     dnsServerResolved,
-  }: PendingExecute): boolean {
+    enumMode: execEnumMode,
+    srvFields: execSrvFields,
+    tlsaFields: execTlsaFields,
+  }: PendingExecute): Promise<ExecuteLookupResult> {
     const trimmed = queryDomain.trim();
-    const sent = query(trimmed, recordTypes, dnsServerResolved);
+    const result = await transformQueryInput({
+      recordTypes,
+      domain: trimmed,
+      enumMode: execEnumMode,
+      srvFields: execSrvFields,
+      tlsaFields: execTlsaFields,
+    });
+    if ("error" in result) {
+      return { sent: false, error: result.error };
+    }
+
+    const sent = query(result.queryName, recordTypes, dnsServerResolved);
     if (sent) {
       pendingHistoryRef.current = {
         domain: trimmed,
         recordTypes,
         dnsServerAddress,
         dnsServerResolved,
+        enumMode: execEnumMode,
+        srvFields: execSrvFields,
+        tlsaFields: execTlsaFields,
       };
+      setViewingHistoryEntry(null);
+      if (autoFoldRecordTypes) {
+        setRecordTypesFolded(true);
+      }
     }
-    return sent;
+    return { sent };
   }
 
   function toggleType(type: string) {
@@ -350,7 +481,7 @@ export function App() {
     return headers;
   }
 
-  function handleSubmit(event: SubmitEvent) {
+  async function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
     setFormError(null);
     setDnsOverrideNotice(null);
@@ -361,19 +492,37 @@ export function App() {
       return;
     }
 
-    const sent = executeLookup({
+    if (blockingTypes.length > 0) {
+      setFormError(
+        `Deselect ${blockingTypes.join(", ")} — only ${engagedRecordType} can be queried while its lookup convention is engaged.`
+      );
+      return;
+    }
+
+    const { sent, error } = await executeLookup({
       domain,
       recordTypes,
       dnsServerAddress: selectedDnsAddress,
       dnsServerResolved: selectedDnsResolved,
+      enumMode,
+      srvFields,
+      tlsaFields,
     });
-    if (!sent) {
+    if (error) {
+      setFormError(error);
+    } else if (!sent) {
       setFormError("Not connected to the server.");
     }
   }
 
   function handleRunLookupSetup(setup: LookupSetup) {
     applyLookupSetup({ ...setup, autoExecute: true });
+    closeMenu();
+  }
+
+  function handleViewHistoryEntry(entry: LookupHistoryEntry) {
+    setFormError(null);
+    setViewingHistoryEntry(entry);
     closeMenu();
   }
 
@@ -398,6 +547,12 @@ export function App() {
   function handleRrDefaultViewModeChange(mode: string) {
     setRrDefaultViewMode(mode).then((saved) => {
       setRrDefaultViewModeState(saved);
+    });
+  }
+
+  function handleAutoFoldRecordTypesChange(value: boolean) {
+    setAutoFoldRecordTypes(value).then((saved) => {
+      setAutoFoldRecordTypesState(saved);
     });
   }
 
@@ -467,74 +622,167 @@ export function App() {
       )}
 
       <form class="query-form" onSubmit={handleSubmit}>
-        <label for="domain">Domain</label>
-        <input
+        <QueryInputPreview
           id="domain"
-          type="text"
-          placeholder="example.com"
-          autocomplete="off"
-          required
-          value={domain}
-          onInput={(e) => setDomain((e.currentTarget as HTMLInputElement).value)}
+          domain={domain}
+          onDomainChange={setDomain}
+          recordTypes={Array.from(selectedTypes)}
+          enumMode={enumMode}
+          srvFields={srvFields}
+          tlsaFields={tlsaFields}
+          onResultChange={setPreviewResult}
         />
+
+        {selectedTypes.has("NAPTR") && (
+          <label class="convention-toggle">
+            <input
+              type="checkbox"
+              checked={enumMode}
+              onChange={(e) => setEnumMode((e.currentTarget as HTMLInputElement).checked)}
+            />
+            ENUM lookup (treat input as a phone number)
+          </label>
+        )}
+        {selectedTypes.has("SRV") && <SrvFieldsInput value={srvFields} onChange={setSrvFields} />}
+        {selectedTypes.has("TLSA") && <TlsaFieldsInput value={tlsaFields} onChange={setTlsaFields} />}
 
         <fieldset>
           <legend>Record types</legend>
-          <div class="record-type-groups">
-            {RECORD_TYPE_GROUPS.map((group) => (
-              <div key={group.label} class="record-type-group">
-                <p class="record-type-group__label">{group.label}</p>
-                <div class="record-type-group__options">
-                  {group.types.map((type) => (
-                    <div key={type} class="record-type-option">
-                      <input
-                        id={`record-type-${type}`}
-                        type="checkbox"
-                        checked={selectedTypes.has(type)}
-                        onChange={() => toggleType(type)}
-                      />
-                      <button
-                        type="button"
-                        class="record-type-help-trigger"
-                        onClick={() => setHelpRecordType(type)}
-                        aria-label={`What is a ${type} record?`}
-                      >
-                        {type}
-                      </button>
-                    </div>
-                  ))}
+          {autoFoldRecordTypes && recordTypesFolded ? (
+            <div class="record-type-folded">
+              <p class="record-type-folded__summary">
+                {Array.from(selectedTypes).join(", ") || "None selected"}
+              </p>
+              <button type="button" class="record-type-folded__change" onClick={() => setRecordTypesFolded(false)}>
+                Change
+              </button>
+            </div>
+          ) : (
+            <div class="record-type-groups">
+              {RECORD_TYPE_GROUPS.map((group) => (
+                <div key={group.label} class="record-type-group">
+                  <p class="record-type-group__label">{group.label}</p>
+                  <div class="record-type-group__options">
+                    {group.types.map((type) => {
+                      const disabled = isRecordTypeCheckboxDisabled(type);
+                      const isConvention = Boolean(RECORD_TYPE_CONVENTION[type]);
+                      const title = recordTypeTitle(type);
+                      return (
+                        <div
+                          key={type}
+                          class={`record-type-option${isConvention ? " record-type-option--convention" : ""}${
+                            disabled ? " record-type-option--disabled" : ""
+                          }`}
+                          title={title}
+                        >
+                          <input
+                            id={`record-type-${type}`}
+                            type="checkbox"
+                            checked={selectedTypes.has(type)}
+                            disabled={disabled}
+                            onChange={() => toggleType(type)}
+                          />
+                          <button
+                            type="button"
+                            class="record-type-help-trigger"
+                            onClick={() => setHelpRecordType(type)}
+                            aria-label={`What is a ${type} record?`}
+                          >
+                            {type}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </fieldset>
+
+        {blockingTypes.length > 0 && (
+          <p class="form-error" role="alert">
+            Deselect {blockingTypes.join(", ")} — only {engagedRecordType} can be queried while its
+            lookup convention is engaged.
+          </p>
+        )}
 
         {formError && <p class="form-error">{formError}</p>}
 
-        <button type="submit" disabled={status !== "connected"}>
+        <button
+          type="submit"
+          disabled={status !== "connected" || blockingTypes.length > 0 || Boolean(previewError)}
+        >
           Lookup
         </button>
       </form>
 
+      {viewingHistoryEntry && (
+        <div class="history-view-banner" role="status">
+          <p>
+            Showing history from <strong>{formatHistoryTime(viewingHistoryEntry.timestamp)}</strong> for{" "}
+            <strong>{viewingHistoryEntry.domain}</strong> ({viewingHistoryEntry.recordTypes.join(", ")})
+          </p>
+          <button
+            type="button"
+            class="history-view-banner__dismiss"
+            onClick={() => setViewingHistoryEntry(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <section class="results" aria-live="polite">
-        {errorMessage && (
-          <div class="record-card record-card--error">
-            <h3>Lookup failed</h3>
-            <p class="record-message record-message--error">
-              {humanizeRequestError(errorMessage)}
-            </p>
-          </div>
+        {viewingHistoryEntry ? (
+          <>
+            {viewingHistoryEntry.responseError && (
+              <div class="record-card record-card--error">
+                <h3>Lookup failed</h3>
+                <p class="record-message record-message--error">
+                  {humanizeRequestError(viewingHistoryEntry.responseError)}
+                </p>
+              </div>
+            )}
+            {viewingHistoryEntry.results && viewingHistoryEntry.results.length > 0
+              ? viewingHistoryEntry.results.map((result) => (
+                  <RecordResultCard
+                    key={result.record_type}
+                    result={result}
+                    domain={viewingHistoryEntry.domain}
+                    defaultViewMode={rrDefaultViewMode}
+                    detailLevel={rrDetailLevel}
+                  />
+                ))
+              : !viewingHistoryEntry.responseError && (
+                  <p class="menu-hint">
+                    No stored results for this entry — it was recorded before result history was
+                    tracked.
+                  </p>
+                )}
+          </>
+        ) : (
+          <>
+            {errorMessage && (
+              <div class="record-card record-card--error">
+                <h3>Lookup failed</h3>
+                <p class="record-message record-message--error">
+                  {humanizeRequestError(errorMessage)}
+                </p>
+              </div>
+            )}
+            {response &&
+              response.results.map((result) => (
+                <RecordResultCard
+                  key={result.record_type}
+                  result={result}
+                  domain={response.domain}
+                  defaultViewMode={rrDefaultViewMode}
+                  detailLevel={rrDetailLevel}
+                />
+              ))}
+          </>
         )}
-        {response &&
-          response.results.map((result) => (
-            <RecordResultCard
-              key={result.record_type}
-              result={result}
-              domain={response.domain}
-              defaultViewMode={rrDefaultViewMode}
-              detailLevel={rrDetailLevel}
-            />
-          ))}
       </section>
 
       <RecordTypeHelpModal
@@ -552,9 +800,13 @@ export function App() {
         quickLookups={quickLookups}
         onQuickLookupsChange={setQuickLookups}
         onRunLookupSetup={handleRunLookupSetup}
+        onViewHistoryEntry={handleViewHistoryEntry}
         currentDomain={domain}
         currentRecordTypes={Array.from(selectedTypes)}
         currentDnsServerAddress={selectedDnsAddress}
+        currentEnumMode={enumMode}
+        currentSrvFields={srvFields}
+        currentTlsaFields={tlsaFields}
         wsUrls={resolvedWsUrls}
         selectedWsUrl={selectedWsUrl}
         httpServerUrl={httpServerUrl}
@@ -579,6 +831,8 @@ export function App() {
         onRrDetailLevelChange={handleRrDetailLevelChange}
         rrDefaultViewMode={rrDefaultViewMode}
         onRrDefaultViewModeChange={handleRrDefaultViewModeChange}
+        autoFoldRecordTypes={autoFoldRecordTypes}
+        onAutoFoldRecordTypesChange={handleAutoFoldRecordTypesChange}
       />
     </main>
   );
