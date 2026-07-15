@@ -41,7 +41,13 @@ import type {
   WsHeader,
 } from "./types";
 
-export type MenuPanel = "settings" | "history" | "quick-lookups" | "about" | null;
+export type MenuPanel =
+  | "settings"
+  | "advanced-settings"
+  | "history"
+  | "quick-lookups"
+  | "about"
+  | null;
 
 export interface LookupSetup {
   domain: string;
@@ -155,8 +161,8 @@ export interface MenuProps {
   onRrDetailLevelChange: (level: string) => void;
   rrDefaultViewMode: RrViewMode;
   onRrDefaultViewModeChange: (mode: string) => void;
-  autoFoldRecordTypes: boolean;
-  onAutoFoldRecordTypesChange: (value: boolean) => void;
+  expandRecordTypesByDefault: boolean;
+  onExpandRecordTypesByDefaultChange: (value: boolean) => void;
 }
 
 export function Menu({
@@ -198,8 +204,8 @@ export function Menu({
   onRrDetailLevelChange,
   rrDefaultViewMode,
   onRrDefaultViewModeChange,
-  autoFoldRecordTypes,
-  onAutoFoldRecordTypesChange,
+  expandRecordTypesByDefault,
+  onExpandRecordTypesByDefaultChange,
 }: MenuProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -226,6 +232,7 @@ export function Menu({
         <header class="menu-panel__header">
           <h2>
             {panel === "settings" && "Settings"}
+            {panel === "advanced-settings" && "Advanced Settings"}
             {panel === "history" && "History"}
             {panel === "quick-lookups" && "Manage Quick Lookups"}
             {panel === "about" && "About"}
@@ -297,6 +304,16 @@ export function Menu({
             dnsOptions={dnsOptions}
             selectedDnsAddress={selectedDnsAddress}
             onDnsServerChange={onDnsServerChange}
+            expandRecordTypesByDefault={expandRecordTypesByDefault}
+            onExpandRecordTypesByDefaultChange={onExpandRecordTypesByDefaultChange}
+            onOpenAdvanced={() => onOpenPanel("advanced-settings")}
+            onBack={() => onOpenPanel(null)}
+          />
+        )}
+
+        {panel === "advanced-settings" && (
+          <AdvancedSettingsPanel
+            dnsOptions={dnsOptions}
             apiKeyInput={apiKeyInput}
             hasApiKey={hasApiKey}
             onApiKeyInput={onApiKeyInput}
@@ -312,10 +329,8 @@ export function Menu({
             onRrDetailLevelChange={onRrDetailLevelChange}
             rrDefaultViewMode={rrDefaultViewMode}
             onRrDefaultViewModeChange={onRrDefaultViewModeChange}
-            autoFoldRecordTypes={autoFoldRecordTypes}
-            onAutoFoldRecordTypesChange={onAutoFoldRecordTypesChange}
             onCustomServersChange={onCustomServersChange}
-            onBack={() => onOpenPanel(null)}
+            onBack={() => onOpenPanel("settings")}
           />
         )}
 
@@ -358,6 +373,111 @@ interface SettingsPanelProps {
   dnsOptions: DnsServerOption[];
   selectedDnsAddress: string;
   onDnsServerChange: (address: string) => void;
+  expandRecordTypesByDefault: boolean;
+  onExpandRecordTypesByDefaultChange: (value: boolean) => void;
+  onOpenAdvanced: () => void;
+  onBack: () => void;
+}
+
+function SettingsPanel({
+  wsUrls,
+  selectedWsUrl,
+  httpServerUrl,
+  onWsUrlChange,
+  onHttpServerUrlChange,
+  dnsOptions,
+  selectedDnsAddress,
+  onDnsServerChange,
+  expandRecordTypesByDefault,
+  onExpandRecordTypesByDefaultChange,
+  onOpenAdvanced,
+  onBack,
+}: SettingsPanelProps) {
+  const derivedWsUrl = deriveWsUrlFromHttp(httpServerUrl);
+  const usingHttpDerivation = Boolean(derivedWsUrl);
+
+  return (
+    <div class="menu-section">
+      <button type="button" class="menu-back" onClick={onBack}>
+        ← Back
+      </button>
+
+      <label for="http-server-url">Server URL (HTTP/HTTPS)</label>
+      <input
+        id="http-server-url"
+        type="url"
+        placeholder="http://localhost:4545/some/path"
+        autocomplete="off"
+        value={httpServerUrl}
+        onInput={(e) => onHttpServerUrlChange((e.currentTarget as HTMLInputElement).value)}
+      />
+      {derivedWsUrl ? (
+        <p class="menu-hint">
+          WebSocket: <code>{derivedWsUrl}</code>
+        </p>
+      ) : httpServerUrl.trim() ? (
+        <p class="menu-error">Enter a valid http:// or https:// URL.</p>
+      ) : (
+        <p class="menu-hint">Derives the WebSocket URL, e.g. http://host/path → ws://host/path/ws</p>
+      )}
+
+      <label for="ws-url">WebSocket URL</label>
+      <select
+        id="ws-url"
+        value={usingHttpDerivation ? "" : selectedWsUrl}
+        disabled={usingHttpDerivation}
+        onChange={(e) => onWsUrlChange((e.currentTarget as HTMLSelectElement).value)}
+      >
+        {usingHttpDerivation && (
+          <option value="" disabled>
+            Using server URL above
+          </option>
+        )}
+        {wsUrls.map((url) => (
+          <option key={url} value={url}>
+            {url}
+          </option>
+        ))}
+      </select>
+
+      <label for="dns-server">DNS server</label>
+      <select
+        id="dns-server"
+        value={selectedDnsAddress}
+        onChange={(e) => onDnsServerChange((e.currentTarget as HTMLSelectElement).value)}
+      >
+        {dnsOptions.map((option) => (
+          <option key={option.address} value={option.address}>
+            {option.label} ({option.resolvedAddress})
+          </option>
+        ))}
+      </select>
+
+      <label class="quick-lookup-option">
+        <input
+          type="checkbox"
+          checked={expandRecordTypesByDefault}
+          onChange={(e) =>
+            onExpandRecordTypesByDefaultChange((e.currentTarget as HTMLInputElement).checked)
+          }
+        />
+        Keep record types expanded
+      </label>
+      <p class="menu-hint">
+        By default the record type selection collapses to a summary on load and after each lookup,
+        so results have more room. Enable this to keep the full selector expanded instead.
+      </p>
+
+      <hr class="menu-divider" />
+      <button type="button" class="menu-advanced-link" onClick={onOpenAdvanced}>
+        Advanced settings →
+      </button>
+    </div>
+  );
+}
+
+interface AdvancedSettingsPanelProps {
+  dnsOptions: DnsServerOption[];
   apiKeyInput: string;
   hasApiKey: boolean;
   onApiKeyInput: (value: string) => void;
@@ -373,21 +493,12 @@ interface SettingsPanelProps {
   onRrDetailLevelChange: (level: string) => void;
   rrDefaultViewMode: RrViewMode;
   onRrDefaultViewModeChange: (mode: string) => void;
-  autoFoldRecordTypes: boolean;
-  onAutoFoldRecordTypesChange: (value: boolean) => void;
   onCustomServersChange: (servers: CustomDnsServer[]) => void;
   onBack: () => void;
 }
 
-function SettingsPanel({
-  wsUrls,
-  selectedWsUrl,
-  httpServerUrl,
-  onWsUrlChange,
-  onHttpServerUrlChange,
+function AdvancedSettingsPanel({
   dnsOptions,
-  selectedDnsAddress,
-  onDnsServerChange,
   apiKeyInput,
   hasApiKey,
   onApiKeyInput,
@@ -403,13 +514,9 @@ function SettingsPanel({
   onRrDetailLevelChange,
   rrDefaultViewMode,
   onRrDefaultViewModeChange,
-  autoFoldRecordTypes,
-  onAutoFoldRecordTypesChange,
   onCustomServersChange,
   onBack,
-}: SettingsPanelProps) {
-  const derivedWsUrl = deriveWsUrlFromHttp(httpServerUrl);
-  const usingHttpDerivation = Boolean(derivedWsUrl);
+}: AdvancedSettingsPanelProps) {
   const [customAddress, setCustomAddress] = useState("");
   const [customLabel, setCustomLabel] = useState("");
   const [dnsMessage, setDnsMessage] = useState<string | null>(null);
@@ -658,71 +765,6 @@ function SettingsPanel({
       <p class="menu-hint">
         How much inline guidance parsed record fields show, in lookup results and record-type help.
       </p>
-
-      <label class="quick-lookup-option">
-        <input
-          type="checkbox"
-          checked={autoFoldRecordTypes}
-          onChange={(e) => onAutoFoldRecordTypesChange((e.currentTarget as HTMLInputElement).checked)}
-        />
-        Collapse record types while a query runs
-      </label>
-      <p class="menu-hint">
-        When enabled, the record type selection collapses to a summary once you submit a lookup
-        (during the query and after results appear), so results have more room. Click "Change" to
-        expand it again.
-      </p>
-
-      <label for="http-server-url">Server URL (HTTP/HTTPS)</label>
-      <input
-        id="http-server-url"
-        type="url"
-        placeholder="http://localhost:4545/some/path"
-        autocomplete="off"
-        value={httpServerUrl}
-        onInput={(e) => onHttpServerUrlChange((e.currentTarget as HTMLInputElement).value)}
-      />
-      {derivedWsUrl ? (
-        <p class="menu-hint">
-          WebSocket: <code>{derivedWsUrl}</code>
-        </p>
-      ) : httpServerUrl.trim() ? (
-        <p class="menu-error">Enter a valid http:// or https:// URL.</p>
-      ) : (
-        <p class="menu-hint">Derives the WebSocket URL, e.g. http://host/path → ws://host/path/ws</p>
-      )}
-
-      <label for="ws-url">WebSocket URL</label>
-      <select
-        id="ws-url"
-        value={usingHttpDerivation ? "" : selectedWsUrl}
-        disabled={usingHttpDerivation}
-        onChange={(e) => onWsUrlChange((e.currentTarget as HTMLSelectElement).value)}
-      >
-        {usingHttpDerivation && (
-          <option value="" disabled>
-            Using server URL above
-          </option>
-        )}
-        {wsUrls.map((url) => (
-          <option key={url} value={url}>
-            {url}
-          </option>
-        ))}
-      </select>
-
-      <label for="dns-server">DNS server</label>
-      <select
-        id="dns-server"
-        value={selectedDnsAddress}
-        onChange={(e) => onDnsServerChange((e.currentTarget as HTMLSelectElement).value)}
-      >
-        {dnsOptions.map((option) => (
-          <option key={option.address} value={option.address}>
-            {option.label} ({option.resolvedAddress})
-          </option>
-        ))}
-      </select>
 
       <hr class="menu-divider" />
       <p class="menu-nav__section-label">Custom DNS servers</p>

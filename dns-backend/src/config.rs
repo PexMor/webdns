@@ -30,6 +30,10 @@ pub struct Cli {
     #[arg(long = "no-serve-web")]
     pub no_serve_web: bool,
 
+    /// Cache-Control max-age (seconds) for served static web assets.
+    #[arg(long)]
+    pub static_cache_seconds: Option<u64>,
+
     /// Restrict per-request `dns_server` to the configured allowlist.
     #[arg(long)]
     pub secure_mode: bool,
@@ -47,6 +51,7 @@ struct FileConfig {
     port: Option<u16>,
     web_root: Option<PathBuf>,
     serve_web: Option<bool>,
+    static_cache_seconds: Option<u64>,
     secure_mode: Option<bool>,
     allowed_dns_servers: Option<Vec<String>>,
 }
@@ -130,6 +135,7 @@ pub struct AppConfig {
     pub bind: String,
     pub web_root: PathBuf,
     pub serve_web: bool,
+    pub static_cache_seconds: u64,
     pub secure_mode: bool,
     pub allowed_dns_servers: Vec<IpAddr>,
     pub report: ConfigReport,
@@ -149,6 +155,10 @@ fn default_web_root() -> PathBuf {
 
 fn default_serve_web() -> bool {
     true
+}
+
+fn default_static_cache_seconds() -> u64 {
+    600
 }
 
 fn env_var(name: &str) -> Option<String> {
@@ -176,6 +186,10 @@ fn env_serve_web() -> Option<bool> {
 
 fn env_secure_mode() -> Option<bool> {
     env_var("DNS_SECURE_MODE").and_then(parse_bool)
+}
+
+fn env_static_cache_seconds() -> Option<u64> {
+    env_var("DNS_STATIC_CACHE_SECONDS").and_then(|value| value.parse().ok())
 }
 
 fn split_csv_trimmed(value: &str) -> Vec<String> {
@@ -410,6 +424,41 @@ fn resolve_port(
     }
 }
 
+fn resolve_u64(
+    cli: Option<u64>,
+    env: Option<u64>,
+    file: Option<u64>,
+    default: u64,
+) -> Resolved<u64> {
+    let candidates = [
+        (ConfigSource::Cli, cli),
+        (ConfigSource::Environment, env),
+        (ConfigSource::File, file),
+    ];
+
+    let mut winner = None;
+    let mut overridden = Vec::new();
+
+    for (source, value) in candidates {
+        let Some(value) = value else {
+            continue;
+        };
+
+        if winner.is_some() {
+            overridden.push((source, value.to_string()));
+        } else {
+            winner = Some((source, value));
+        }
+    }
+
+    let (source, value) = winner.unwrap_or((ConfigSource::Default, default));
+    Resolved {
+        value,
+        source,
+        overridden,
+    }
+}
+
 fn resolve_bind(
     cli: Option<String>,
     env: Option<String>,
@@ -557,6 +606,14 @@ impl AppConfig {
             );
         }
 
+        let static_cache_seconds = resolve_u64(
+            cli.static_cache_seconds,
+            env_static_cache_seconds(),
+            file.static_cache_seconds,
+            default_static_cache_seconds(),
+        );
+        log_resolved(&static_cache_seconds, "static_cache_seconds", false);
+
         let secure_mode = resolve_bool(
             if cli.secure_mode { Some(true) } else { None },
             env_secure_mode(),
@@ -617,6 +674,7 @@ impl AppConfig {
             bind: effective_bind,
             web_root: web_root.value,
             serve_web: serve_web.value,
+            static_cache_seconds: static_cache_seconds.value,
             secure_mode: secure_mode.value,
             allowed_dns_servers,
             report,
@@ -671,5 +729,26 @@ mod tests {
     #[test]
     fn require_allowed_servers_when_secure_ignored_when_disabled() {
         assert!(require_allowed_servers_when_secure(false, &[]).is_ok());
+    }
+
+    #[test]
+    fn resolve_u64_falls_back_to_default_static_cache_seconds() {
+        let resolved = resolve_u64(None, None, None, default_static_cache_seconds());
+        assert_eq!(resolved.value, 600);
+        assert_eq!(resolved.source, ConfigSource::Default);
+    }
+
+    #[test]
+    fn resolve_u64_prefers_cli_over_env_and_file() {
+        let resolved = resolve_u64(Some(3600), Some(60), Some(120), default_static_cache_seconds());
+        assert_eq!(resolved.value, 3600);
+        assert_eq!(resolved.source, ConfigSource::Cli);
+    }
+
+    #[test]
+    fn resolve_u64_falls_back_to_env_then_file() {
+        let resolved = resolve_u64(None, Some(60), Some(120), default_static_cache_seconds());
+        assert_eq!(resolved.value, 60);
+        assert_eq!(resolved.source, ConfigSource::Environment);
     }
 }

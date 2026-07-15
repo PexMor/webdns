@@ -25,19 +25,19 @@ import {
 import type { DetailLevel } from "./rr";
 import { addHistoryEntry } from "./lookupHistoryStore";
 import { getLookupForm, saveLookupForm } from "./lookupFormStore";
-import { initAutoFoldRecordTypes, setAutoFoldRecordTypes } from "./queryFormPrefsStore";
+import {
+  initExpandRecordTypesByDefault,
+  setExpandRecordTypesByDefault,
+} from "./queryFormPrefsStore";
 import { listQuickLookups } from "./quickLookupStore";
 import { listWsHeaders, migrateLegacyApiKey } from "./wsHeaderStore";
 import { Menu, formatHistoryTime, type LookupSetup, type MenuPanel } from "./menu";
 import { useDnsSocket } from "./useDnsSocket";
-import {
-  RECORD_TYPE_CONVENTION,
-  RECORD_TYPE_GROUPS,
-  conventionTooltip,
-  recordTypeForConvention,
-} from "./recordTypes";
+import { conventionTooltip, recordTypeForConvention } from "./recordTypes";
 import { RecordResultCard } from "./RecordResultCard";
+import { RecordTypeGroups } from "./RecordTypeGroups";
 import { RecordTypeHelpModal } from "./RecordTypeHelpModal";
+import { RecordTypePicker } from "./RecordTypePicker";
 import { QueryInputPreview } from "./QueryInputPreview";
 import { SrvFieldsInput, TlsaFieldsInput } from "./SrvTlsaFields";
 import {
@@ -103,8 +103,9 @@ export function App() {
   const [helpExampleWrap, setHelpExampleWrap] = useState<HelpExampleWrapMode>("nowrap");
   const [rrDetailLevel, setRrDetailLevelState] = useState<DetailLevel>("standard");
   const [rrDefaultViewMode, setRrDefaultViewModeState] = useState<RrViewMode>("parsed");
-  const [autoFoldRecordTypes, setAutoFoldRecordTypesState] = useState(false);
-  const [recordTypesFolded, setRecordTypesFolded] = useState(false);
+  const [expandRecordTypesByDefault, setExpandRecordTypesByDefaultState] = useState(false);
+  const [recordTypesFolded, setRecordTypesFolded] = useState(true);
+  const [recordTypePickerOpen, setRecordTypePickerOpen] = useState(false);
 
   const [domain, setDomain] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(DEFAULT_SELECTED);
@@ -201,7 +202,7 @@ export function App() {
       const theme = await initTheme();
       const exampleWrap = await initHelpExampleWrap();
       const rrViewPrefs = await initRrViewPrefs();
-      const foldRecordTypes = await initAutoFoldRecordTypes();
+      const expandByDefault = await initExpandRecordTypesByDefault();
       const loaded = await loadConfig();
       const custom = await listCustomServers();
       const presets = await listQuickLookups();
@@ -223,7 +224,8 @@ export function App() {
       setHelpExampleWrap(exampleWrap);
       setRrDetailLevelState(rrViewPrefs.detailLevel);
       setRrDefaultViewModeState(rrViewPrefs.defaultViewMode);
-      setAutoFoldRecordTypesState(foldRecordTypes);
+      setExpandRecordTypesByDefaultState(expandByDefault);
+      setRecordTypesFolded(!expandByDefault);
       setHttpServerUrl(httpUrl);
       setSelectedWsUrl(wsUrl);
       setSelectedDnsAddress(dnsAddress);
@@ -415,7 +417,7 @@ export function App() {
         tlsaFields: execTlsaFields,
       };
       setViewingHistoryEntry(null);
-      if (autoFoldRecordTypes) {
+      if (!expandRecordTypesByDefault) {
         setRecordTypesFolded(true);
       }
     }
@@ -550,9 +552,10 @@ export function App() {
     });
   }
 
-  function handleAutoFoldRecordTypesChange(value: boolean) {
-    setAutoFoldRecordTypes(value).then((saved) => {
-      setAutoFoldRecordTypesState(saved);
+  function handleExpandRecordTypesByDefaultChange(value: boolean) {
+    setExpandRecordTypesByDefault(value).then((saved) => {
+      setExpandRecordTypesByDefaultState(saved);
+      if (saved) setRecordTypesFolded(false);
     });
   }
 
@@ -648,57 +651,40 @@ export function App() {
 
         <fieldset>
           <legend>Record types</legend>
-          {autoFoldRecordTypes && recordTypesFolded ? (
+          {recordTypesFolded ? (
             <div class="record-type-folded">
               <p class="record-type-folded__summary">
                 {Array.from(selectedTypes).join(", ") || "None selected"}
               </p>
-              <button type="button" class="record-type-folded__change" onClick={() => setRecordTypesFolded(false)}>
+              <button
+                type="button"
+                class="record-type-folded__change"
+                onClick={() => setRecordTypePickerOpen(true)}
+              >
                 Change
               </button>
             </div>
           ) : (
-            <div class="record-type-groups">
-              {RECORD_TYPE_GROUPS.map((group) => (
-                <div key={group.label} class="record-type-group">
-                  <p class="record-type-group__label">{group.label}</p>
-                  <div class="record-type-group__options">
-                    {group.types.map((type) => {
-                      const disabled = isRecordTypeCheckboxDisabled(type);
-                      const isConvention = Boolean(RECORD_TYPE_CONVENTION[type]);
-                      const title = recordTypeTitle(type);
-                      return (
-                        <div
-                          key={type}
-                          class={`record-type-option${isConvention ? " record-type-option--convention" : ""}${
-                            disabled ? " record-type-option--disabled" : ""
-                          }`}
-                          title={title}
-                        >
-                          <input
-                            id={`record-type-${type}`}
-                            type="checkbox"
-                            checked={selectedTypes.has(type)}
-                            disabled={disabled}
-                            onChange={() => toggleType(type)}
-                          />
-                          <button
-                            type="button"
-                            class="record-type-help-trigger"
-                            onClick={() => setHelpRecordType(type)}
-                            aria-label={`What is a ${type} record?`}
-                          >
-                            {type}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <RecordTypeGroups
+              selectedTypes={selectedTypes}
+              toggleType={toggleType}
+              isRecordTypeCheckboxDisabled={isRecordTypeCheckboxDisabled}
+              recordTypeTitle={recordTypeTitle}
+              onOpenHelp={setHelpRecordType}
+            />
           )}
         </fieldset>
+
+        {recordTypePickerOpen && (
+          <RecordTypePicker
+            selectedTypes={selectedTypes}
+            toggleType={toggleType}
+            isRecordTypeCheckboxDisabled={isRecordTypeCheckboxDisabled}
+            recordTypeTitle={recordTypeTitle}
+            onOpenHelp={setHelpRecordType}
+            onClose={() => setRecordTypePickerOpen(false)}
+          />
+        )}
 
         {blockingTypes.length > 0 && (
           <p class="form-error" role="alert">
@@ -831,8 +817,8 @@ export function App() {
         onRrDetailLevelChange={handleRrDetailLevelChange}
         rrDefaultViewMode={rrDefaultViewMode}
         onRrDefaultViewModeChange={handleRrDefaultViewModeChange}
-        autoFoldRecordTypes={autoFoldRecordTypes}
-        onAutoFoldRecordTypesChange={handleAutoFoldRecordTypesChange}
+        expandRecordTypesByDefault={expandRecordTypesByDefault}
+        onExpandRecordTypesByDefaultChange={handleExpandRecordTypesByDefaultChange}
       />
     </main>
   );

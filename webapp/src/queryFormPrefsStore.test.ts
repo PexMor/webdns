@@ -23,9 +23,9 @@ vi.mock("./webdnsDb", () => ({
 }));
 
 import {
-  getAutoFoldRecordTypes,
-  initAutoFoldRecordTypes,
-  setAutoFoldRecordTypes,
+  getExpandRecordTypesByDefault,
+  initExpandRecordTypesByDefault,
+  setExpandRecordTypesByDefault,
 } from "./queryFormPrefsStore";
 
 describe("queryFormPrefsStore", () => {
@@ -33,20 +33,54 @@ describe("queryFormPrefsStore", () => {
     memory.clear();
   });
 
-  it("defaults to not folding record types", async () => {
-    expect(await getAutoFoldRecordTypes()).toBe(false);
-    expect(await initAutoFoldRecordTypes()).toBe(false);
+  it("defaults to folded (not expanded) when no preference is stored", async () => {
+    expect(await getExpandRecordTypesByDefault()).toBe(false);
+    expect(await initExpandRecordTypesByDefault()).toBe(false);
   });
 
   it("round-trips an enabled preference", async () => {
-    const saved = await setAutoFoldRecordTypes(true);
+    const saved = await setExpandRecordTypesByDefault(true);
     expect(saved).toBe(true);
-    expect(await getAutoFoldRecordTypes()).toBe(true);
+    expect(await getExpandRecordTypesByDefault()).toBe(true);
   });
 
   it("round-trips back to disabled", async () => {
-    await setAutoFoldRecordTypes(true);
-    await setAutoFoldRecordTypes(false);
-    expect(await getAutoFoldRecordTypes()).toBe(false);
+    await setExpandRecordTypesByDefault(true);
+    await setExpandRecordTypesByDefault(false);
+    expect(await getExpandRecordTypesByDefault()).toBe(false);
+  });
+
+  it("migrates the legacy autoFoldRecordTypes=true (fold after submit) to expandRecordTypesByDefault=false", async () => {
+    memory.set("autoFoldRecordTypes", {
+      key: "autoFoldRecordTypes",
+      value: true,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(await getExpandRecordTypesByDefault()).toBe(false);
+    // Migration persists under the new key so subsequent reads don't re-derive it.
+    expect(memory.get("expandRecordTypesByDefault")?.value).toBe(false);
+  });
+
+  it("migrates the legacy autoFoldRecordTypes=false (never fold) to expandRecordTypesByDefault=true", async () => {
+    memory.set("autoFoldRecordTypes", {
+      key: "autoFoldRecordTypes",
+      value: false,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(await getExpandRecordTypesByDefault()).toBe(true);
+    expect(memory.get("expandRecordTypesByDefault")?.value).toBe(true);
+  });
+
+  it("prefers an explicitly stored expandRecordTypesByDefault over the legacy key", async () => {
+    memory.set("autoFoldRecordTypes", {
+      key: "autoFoldRecordTypes",
+      value: false,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await setExpandRecordTypesByDefault(false);
+
+    expect(await getExpandRecordTypesByDefault()).toBe(false);
   });
 });
