@@ -33,18 +33,17 @@ export function RecordTypeGroups({
                   }`}
                   title={title}
                 >
-                  <div class="record-type-option__toggle">
+                  <label class="record-type-option__toggle" for={`record-type-${type}`}>
                     <input
                       id={`record-type-${type}`}
                       type="checkbox"
+                      class="record-type-option__checkbox"
                       checked={selectedTypes.has(type)}
                       disabled={disabled}
                       onChange={() => toggleType(type)}
                     />
-                    <label for={`record-type-${type}`} class="record-type-option__label">
-                      {type}
-                    </label>
-                  </div>
+                    <span class="record-type-option__label">{type}</span>
+                  </label>
                   <button
                     type="button"
                     class="record-type-help-trigger"

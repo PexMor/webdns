@@ -687,47 +687,46 @@ fieldset {
 .record-type-option {
   display: flex;
   align-items: stretch;
-  min-height: 44px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  overflow: hidden;
-  transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  gap: 0.4rem;
 }
 
 .record-type-option__toggle {
   position: relative;
   display: flex;
   align-items: center;
+  min-height: 44px;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.record-type-option input[type="checkbox"] {
-  appearance: none;
+.record-type-option__checkbox {
   position: absolute;
   inset: 0;
   margin: 0;
   padding: 0;
+  opacity: 0;
   cursor: pointer;
 }
 
-.record-type-option input[type="checkbox"]:checked {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border: 1px solid var(--accent);
-}
-
-.record-type-option input[type="checkbox"]:disabled {
+.record-type-option__checkbox:disabled {
   cursor: not-allowed;
 }
 
-.record-type-option input[type="checkbox"]:focus-visible {
+.record-type-option__toggle:has(.record-type-option__checkbox:checked) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+}
+
+.record-type-option__toggle:has(.record-type-option__checkbox:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 .record-type-option__label {
-  position: relative;
-  pointer-events: none;
-  padding: 0.6rem 0.5rem 0.6rem 0.9rem;
   font-size: 0.95rem;
   font-weight: 500;
   color: var(--text);
@@ -738,7 +737,7 @@ fieldset {
   color: var(--convention);
 }
 
-.record-type-option--disabled {
+.record-type-option--disabled .record-type-option__toggle {
   opacity: 0.4;
 }
 
@@ -753,8 +752,8 @@ fieldset {
   min-width: 44px;
   min-height: 44px;
   background: transparent;
-  border: none;
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 999px;
   color: var(--muted);
   font-size: 0.9rem;
   font-weight: 600;
@@ -765,6 +764,7 @@ fieldset {
 .record-type-help-trigger:hover,
 .record-type-help-trigger:focus-visible {
   color: var(--accent);
+  border-color: var(--accent);
   outline: none;
 }
 
