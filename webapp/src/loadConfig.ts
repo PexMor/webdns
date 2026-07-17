@@ -181,7 +181,7 @@ function isValidConfig(data: unknown): data is {
 
 export async function loadConfig(): Promise<RuntimeConfig> {
   try {
-    const res = await fetch("/config.json");
+    const res = await fetch("config.json");
     if (!res.ok) throw new Error("fetch failed");
     const data: unknown = await res.json();
     if (!isValidConfig(data)) throw new Error("invalid schema");

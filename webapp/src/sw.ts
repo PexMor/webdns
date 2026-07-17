@@ -4,7 +4,7 @@ import type { WorkboxPlugin } from "workbox-core/types.js";
 
 declare const self: ServiceWorkerGlobalScope;
 
-const CONFIG_PATH = "/config.json";
+const CONFIG_PATH = "config.json";
 const NAVIGATE_FALLBACK_URL = "index.html";
 
 let identityProxyEnabled = false;
