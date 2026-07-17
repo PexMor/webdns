@@ -17,7 +17,7 @@
   "_comment_demo": "Static demo deploy example (disabled by default): set demo.enabled true, wsUrls [], and point dataUrl at /demo.jsonl",
   "demo": {
     "enabled": true,
-    "dataUrl": "/demo.jsonl",
+    "dataUrl": "demo.jsonl",
     "autoplay": {
       "enabled": true,
       "intervalMs": 5000
