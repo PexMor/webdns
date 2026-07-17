@@ -1,5 +1,5 @@
 {
-  "wsUrls": ["/ws"],
+  "wsUrls": [],
   "dnsServers": [
     { "label": "Google Primary", "address": "8.8.8.8" },
     { "label": "Google Secondary", "address": "8.8.4.4" },
@@ -13,5 +13,14 @@
   "identityProxy": {
     "enabled": false,
     "probePath": "/version"
+  },
+  "_comment_demo": "Static demo deploy example (disabled by default): set demo.enabled true, wsUrls [], and point dataUrl at /demo.jsonl",
+  "demo": {
+    "enabled": true,
+    "dataUrl": "/demo.jsonl",
+    "autoplay": {
+      "enabled": true,
+      "intervalMs": 5000
+    }
   }
 }

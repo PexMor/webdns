@@ -2,15 +2,18 @@ import { useState } from "preact/hooks";
 import { describeRecordResult } from "./formatRecordResult";
 import { GenericView } from "./rr/GenericView";
 import { getRrTypeEntry } from "./rr";
-import type { DetailLevel } from "./rr";
+import type { DetailLevel, FollowUpQuery } from "./rr";
 import type { RrViewMode } from "./rrViewPrefsStore";
 import type { DnsRecordResult } from "./types";
+import { RecordCliHintModal } from "./RecordCliHintModal";
 
 export interface RecordResultCardProps {
   result: DnsRecordResult;
   domain: string;
   defaultViewMode: RrViewMode;
   detailLevel: DetailLevel;
+  dnsServerResolved?: string;
+  onFollowUp?: (query: FollowUpQuery) => void;
 }
 
 export function RecordResultCard({
@@ -18,10 +21,13 @@ export function RecordResultCard({
   domain,
   defaultViewMode,
   detailLevel,
+  dnsServerResolved,
+  onFollowUp,
 }: RecordResultCardProps) {
   const { kind, message, records } = describeRecordResult(result, domain);
   const entry = getRrTypeEntry(result.record_type);
   const [viewMode, setViewMode] = useState<RrViewMode>(defaultViewMode);
+  const [cliHintOpen, setCliHintOpen] = useState(false);
 
   return (
     <div class={`record-card record-card--${kind}`}>
@@ -29,15 +35,26 @@ export function RecordResultCard({
         <h3>
           {result.record_type} — {domain}
         </h3>
-        {kind === "success" && entry && (
+        <div class="record-card__actions">
+          {kind === "success" && entry && (
+            <button
+              type="button"
+              class="rr-view-toggle"
+              onClick={() => setViewMode((mode) => (mode === "parsed" ? "raw" : "parsed"))}
+            >
+              {viewMode === "parsed" ? "Show raw" : "Show parsed"}
+            </button>
+          )}
           <button
             type="button"
-            class="rr-view-toggle"
-            onClick={() => setViewMode((mode) => (mode === "parsed" ? "raw" : "parsed"))}
+            class="rr-view-toggle rr-cli-toggle"
+            onClick={() => setCliHintOpen(true)}
+            aria-label="Show command-line lookup examples"
+            title="Command line"
           >
-            {viewMode === "parsed" ? "Show raw" : "Show parsed"}
+            &gt;_
           </button>
-        )}
+        </div>
       </div>
       {kind === "success" ? (
         <div class="rr-records">
@@ -48,6 +65,7 @@ export function RecordResultCard({
               recordType={result.record_type}
               viewMode={viewMode}
               detailLevel={detailLevel}
+              onFollowUp={onFollowUp}
             />
           ))}
         </div>
@@ -56,6 +74,13 @@ export function RecordResultCard({
           {message}
         </p>
       )}
+      <RecordCliHintModal
+        open={cliHintOpen}
+        onClose={() => setCliHintOpen(false)}
+        recordType={result.record_type}
+        domain={domain}
+        dnsServerResolved={dnsServerResolved}
+      />
     </div>
   );
 }
@@ -65,9 +90,10 @@ interface RrRecordViewProps {
   recordType: string;
   viewMode: RrViewMode;
   detailLevel: DetailLevel;
+  onFollowUp?: (query: FollowUpQuery) => void;
 }
 
-function RrRecordView({ raw, recordType, viewMode, detailLevel }: RrRecordViewProps) {
+function RrRecordView({ raw, recordType, viewMode, detailLevel, onFollowUp }: RrRecordViewProps) {
   const entry = getRrTypeEntry(recordType);
 
   if (viewMode === "raw" || !entry) {
@@ -80,5 +106,7 @@ function RrRecordView({ raw, recordType, viewMode, detailLevel }: RrRecordViewPr
   }
 
   const View = entry.View;
-  return <View fields={entry.fields} detailLevel={detailLevel} value={parsed} />;
+  return (
+    <View fields={entry.fields} detailLevel={detailLevel} value={parsed} onFollowUp={onFollowUp} />
+  );
 }

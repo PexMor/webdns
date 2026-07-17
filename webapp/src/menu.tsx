@@ -33,6 +33,7 @@ import {
   removeWsHeader,
 } from "./wsHeaderStore";
 import { deriveWsUrlFromHttp, isValidIpAddress } from "./loadConfig";
+import { parseImportedHistoryText } from "./historyImportFormat";
 import type {
   CustomDnsServer,
   DnsServerOption,
@@ -46,6 +47,7 @@ export type MenuPanel =
   | "advanced-settings"
   | "history"
   | "quick-lookups"
+  | "mail-dns-check"
   | "about"
   | null;
 
@@ -77,29 +79,6 @@ export function formatHistoryTime(timestamp: string): string {
  *  object per line) and returns a flat array of raw values ready for
  *  `importHistory`. Lines that fail to parse become `null`, which
  *  `importHistory` counts as skipped rather than throwing. */
-function parseImportedHistoryText(text: string): unknown[] {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (Array.isArray(parsed)) return parsed;
-  } catch {
-    // Not a single JSON array — fall through to NDJSON/JSONL parsing below.
-  }
-
-  return trimmed
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    });
-}
 
 function downloadTextFile(content: string, filename: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
@@ -163,6 +142,9 @@ export interface MenuProps {
   onRrDefaultViewModeChange: (mode: string) => void;
   expandRecordTypesByDefault: boolean;
   onExpandRecordTypesByDefaultChange: (value: boolean) => void;
+  canRunMailDnsCheck: boolean;
+  onRunMailDnsCheck: (input: { domain: string; dkimSelectors: string }) => void;
+  mailDnsCheckDomainSeed?: string;
 }
 
 export function Menu({
@@ -206,6 +188,9 @@ export function Menu({
   onRrDefaultViewModeChange,
   expandRecordTypesByDefault,
   onExpandRecordTypesByDefaultChange,
+  canRunMailDnsCheck,
+  onRunMailDnsCheck,
+  mailDnsCheckDomainSeed = "",
 }: MenuProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -235,6 +220,7 @@ export function Menu({
             {panel === "advanced-settings" && "Advanced Settings"}
             {panel === "history" && "History"}
             {panel === "quick-lookups" && "Manage Quick Lookups"}
+            {panel === "mail-dns-check" && "Mail DNS check"}
             {panel === "about" && "About"}
             {!panel && "Menu"}
           </h2>
@@ -287,6 +273,9 @@ export function Menu({
             </button>
             <button type="button" onClick={() => onOpenPanel("quick-lookups")}>
               Manage Quick Lookups
+            </button>
+            <button type="button" onClick={() => onOpenPanel("mail-dns-check")}>
+              Mail DNS check
             </button>
             <button type="button" onClick={() => onOpenPanel("about")}>
               About
@@ -354,6 +343,15 @@ export function Menu({
             currentSrvFields={currentSrvFields}
             currentTlsaFields={currentTlsaFields}
             dnsOptions={dnsOptions}
+            onBack={() => onOpenPanel(null)}
+          />
+        )}
+
+        {panel === "mail-dns-check" && (
+          <MailDnsCheckPanel
+            initialDomain={mailDnsCheckDomainSeed}
+            canRun={canRunMailDnsCheck}
+            onRun={onRunMailDnsCheck}
             onBack={() => onOpenPanel(null)}
           />
         )}
@@ -1427,6 +1425,83 @@ function QuickLookupsPanel({
 
       {message && <p class="menu-message">{message}</p>}
       {error && <p class="menu-error">{error}</p>}
+    </div>
+  );
+}
+
+interface MailDnsCheckPanelProps {
+  initialDomain: string;
+  canRun: boolean;
+  onRun: (input: { domain: string; dkimSelectors: string }) => void;
+  onBack: () => void;
+}
+
+function MailDnsCheckPanel({ initialDomain, canRun, onRun, onBack }: MailDnsCheckPanelProps) {
+  const [domain, setDomain] = useState(initialDomain);
+  const [dkimSelectors, setDkimSelectors] = useState("default");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDomain(initialDomain);
+  }, [initialDomain]);
+
+  function handleSubmit(event: Event) {
+    event.preventDefault();
+    const trimmed = domain.trim();
+    if (!trimmed) {
+      setError("Enter a domain name.");
+      return;
+    }
+    if (!canRun) {
+      setError("Not connected to the server.");
+      return;
+    }
+    setError(null);
+    onRun({ domain: trimmed, dkimSelectors });
+  }
+
+  return (
+    <div class="menu-section">
+      <button type="button" class="menu-back" onClick={onBack}>
+        ← Back
+      </button>
+
+      <p class="menu-hint">
+        Audit SPF, DMARC, DKIM, and MX records across authoritative nameservers. DKIM selectors
+        cannot be discovered automatically — find them in a sent email&apos;s{" "}
+        <code>DKIM-Signature</code> header (<code>s=</code> tag).
+      </p>
+
+      <form onSubmit={handleSubmit}>
+        <label>
+          Domain
+          <input
+            type="text"
+            value={domain}
+            onInput={(e) => setDomain((e.currentTarget as HTMLInputElement).value)}
+            placeholder="example.com"
+            autocomplete="off"
+          />
+        </label>
+
+        <label>
+          DKIM selectors
+          <input
+            type="text"
+            value={dkimSelectors}
+            onInput={(e) => setDkimSelectors((e.currentTarget as HTMLInputElement).value)}
+            placeholder="default"
+            autocomplete="off"
+          />
+        </label>
+        <p class="menu-hint">Comma-separated list, e.g. <code>default,google</code></p>
+
+        {error && <p class="menu-error">{error}</p>}
+
+        <button type="submit" disabled={!canRun}>
+          Run check
+        </button>
+      </form>
     </div>
   );
 }

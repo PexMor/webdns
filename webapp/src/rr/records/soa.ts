@@ -21,10 +21,42 @@ const parseSoa: RrParser<SoaFields> = (raw) => {
   return { mname, rname, serial, refresh, retry, expire, minimum };
 };
 
+/** Decodes an RFC 1035 rname (e.g. `hostmaster.example.com.`) into a
+ *  `user@domain` email address. The first *unescaped* `.` separates the
+ *  local part from the domain; `\.` within the local part is a literal dot.
+ *  Returns `null` when the value has no such separator (so no domain part
+ *  is present) or the local part is empty. */
+export function decodeSoaRname(rname: string): string | null {
+  const trimmed = rname.trim();
+  if (!trimmed) return null;
+
+  let local = "";
+  let i = 0;
+  for (; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === "\\" && i + 1 < trimmed.length) {
+      local += trimmed[i + 1];
+      i++;
+      continue;
+    }
+    if (ch === ".") break;
+    local += ch;
+  }
+
+  if (i >= trimmed.length || !local) return null;
+
+  let domain = trimmed.slice(i + 1);
+  if (domain.endsWith(".")) domain = domain.slice(0, -1);
+  if (!domain) return null;
+
+  return `${local}@${domain}`;
+}
+
 const SOA_FIELDS: RrFieldMeta[] = [
   {
     key: "mname",
     label: "Primary name server",
+    kind: "hostname",
     explain: {
       minimal: "Primary name server",
       standard: "The primary (master) name server for this zone.",
@@ -34,6 +66,8 @@ const SOA_FIELDS: RrFieldMeta[] = [
   {
     key: "rname",
     label: "Responsible party",
+    kind: "email-encoded",
+    decode: decodeSoaRname,
     explain: {
       minimal: "Zone contact",
       standard: "The zone administrator's contact, encoded as a hostname (first '.' = '@').",

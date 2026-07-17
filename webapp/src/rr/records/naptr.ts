@@ -73,6 +73,7 @@ const NAPTR_FIELDS: RrFieldMeta[] = [
   {
     key: "replacement",
     label: "Replacement",
+    kind: "hostname",
     explain: {
       minimal: "Next lookup name",
       standard: "The next domain name to query, or '.' if the regexp already produced the result.",

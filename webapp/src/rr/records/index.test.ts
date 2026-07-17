@@ -59,6 +59,12 @@ describe("TXT", () => {
   it("parses multiple adjacent quoted strings", () => {
     expect(parseOrThrow("TXT", '"part1" "part2"')).toEqual({ strings: ["part1", "part2"] });
   });
+
+  it("keeps an unquoted multi-word string as a single value, spaces intact", () => {
+    expect(parseOrThrow("TXT", "v=spf1 mx a:mail.example.com -all")).toEqual({
+      strings: ["v=spf1 mx a:mail.example.com -all"],
+    });
+  });
 });
 
 describe("SOA", () => {

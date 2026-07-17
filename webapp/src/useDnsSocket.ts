@@ -72,6 +72,12 @@ export function useDnsSocket(
   const connectionGenRef = useRef(0);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingQueriesRef = useRef<
+    Array<{
+      resolve: (response: DnsQueryResponse) => void;
+      reject: (error: Error) => void;
+    }>
+  >([]);
 
   headersRef.current = connectionHeaders;
   queryMapRef.current = queryMap;
@@ -210,10 +216,26 @@ export function useDnsSocket(
         try {
           data = JSON.parse(event.data);
         } catch {
+          const pending = pendingQueriesRef.current.shift();
+          if (pending) {
+            pending.reject(new Error("Received malformed response from server"));
+            return;
+          }
           setErrorMessage("Received malformed response from server");
           setResponse(null);
           return;
         }
+
+        const pending = pendingQueriesRef.current.shift();
+        if (pending) {
+          if (data.error) {
+            pending.reject(new Error(data.error));
+          } else {
+            pending.resolve(data);
+          }
+          return;
+        }
+
         if (data.error) {
           setErrorMessage(data.error);
           setResponse(null);
@@ -320,6 +342,35 @@ export function useDnsSocket(
     return true;
   }, []);
 
+  const queryAsync = useCallback(
+    (domain: string, recordTypes: string[], dnsServer?: string): Promise<DnsQueryResponse> => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return Promise.reject(new Error("Not connected to the server."));
+      }
+
+      return new Promise((resolve, reject) => {
+        pendingQueriesRef.current.push({ resolve, reject });
+
+        const payload: { domain: string; record_types: string[]; dns_server?: string } = {
+          domain,
+          record_types: recordTypes,
+        };
+        if (dnsServer) {
+          payload.dns_server = dnsServer;
+        }
+
+        try {
+          ws.send(JSON.stringify(payload));
+        } catch (error) {
+          pendingQueriesRef.current.pop();
+          reject(error instanceof Error ? error : new Error("Failed to send query"));
+        }
+      });
+    },
+    []
+  );
+
   return {
     status,
     statusLabel,
@@ -333,5 +384,6 @@ export function useDnsSocket(
     saveApiKey,
     saveConnectionHeaders,
     query,
+    queryAsync,
   };
 }

@@ -9,6 +9,7 @@ export function FieldList<T extends ParsedFieldValues>({
   fields,
   detailLevel,
   value,
+  onFollowUp,
 }: RrViewProps<T>) {
   return (
     <div class="rr-field-list">
@@ -20,6 +21,8 @@ export function FieldList<T extends ParsedFieldValues>({
           explain={field.explain}
           detailLevel={detailLevel}
           kind={field.kind}
+          decode={field.decode}
+          onFollowUp={onFollowUp}
         />
       ))}
     </div>

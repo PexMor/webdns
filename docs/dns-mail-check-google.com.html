@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DNS mail check: google.com</title>
+  <style>body { font-family: system-ui, -apple-system, sans-serif; max-width: 52rem; margin: 1.5rem auto; padding: 0 1rem; font-size: 14px; line-height: 1.45; color: #1a1a1a; }
+h1 { font-size: 1.35rem; border-bottom: 1px solid #ddd; padding-bottom: 0.3rem; }
+h2 { font-size: 1.1rem; margin-top: 1.4rem; color: #333; }
+h3 { font-size: 1rem; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 0.5rem 0 1rem; }
+th, td { border: 1px solid #ccc; padding: 0.3rem 0.5rem; text-align: left; vertical-align: top; }
+th { background: #f0f0f0; font-weight: 600; }
+code { font-size: 0.85em; background: #f4f4f4; padding: 0.1em 0.25em; border-radius: 2px; }
+pre { background: #f8f8f8; padding: 0.6rem 0.8rem; overflow-x: auto; font-size: 12px; border: 1px solid #e8e8e8; border-radius: 3px; white-space: pre-wrap; word-break: break-word; }
+pre code { background: none; padding: 0; }
+ul { padding-left: 1.4rem; }
+li { margin: 0.2rem 0; }
+hr { border: none; border-top: 1px solid #ddd; margin: 1.5rem 0; }
+.status-ok { color: #16a34a; }
+.status-warnings { color: #b45309; }
+.status-errors { color: #dc2626; }</style>
+</head>
+<body>
+  <h1>DNS mail check report: google.com</h1>
+  <p>Generated: Fri, 17 Jul 2026 15:06:11 UTC</p>
+
+  <h2>Summary</h2>
+  <table>
+    <tr><th></th><th></th></tr>
+    <tr><td><strong>Status</strong></td><td class="status-errors"><strong>ERRORS</strong></td></tr>
+    <tr><td>Errors</td><td>1</td></tr>
+    <tr><td>Warnings</td><td>10</td></tr>
+    <tr><td>Passed checks</td><td>8</td></tr>
+  </table>
+
+  <h2>Errors to fix</h2>
+<ul>
+<li>❌ DKIM record missing for selector 'google' at google._domainkey.google.com</li>
+</ul>
+
+  <h2>Warnings</h2>
+<ul>
+<li>⚠️ SPF uses softfail ~all — consider -all for stricter policy</li>
+<li>⚠️ FCrdNS mismatch for smtp.google.com: A=smtp.google.com, PTR=wn-in-f27.1e100.net. (expected matching hostname)</li>
+<li>⚠️ FCrdNS mismatch for smtp.google.com: A=smtp.google.com, PTR=wn-in-f26.1e100.net. (expected matching hostname)</li>
+<li>⚠️ FCrdNS mismatch for smtp.google.com: A=smtp.google.com, PTR=wo-in-f27.1e100.net. (expected matching hostname)</li>
+<li>⚠️ FCrdNS mismatch for smtp.google.com: A=smtp.google.com, PTR=wm-in-f26.1e100.net. (expected matching hostname)</li>
+<li>⚠️ FCrdNS mismatch for smtp.google.com: A=smtp.google.com, PTR=wo-in-f26.1e100.net. (expected matching hostname)</li>
+<li>⚠️ FCrdNS mismatch for smtp.google.com: A=smtp.google.com, PTR=wo-in-f26.1e100.net. (expected matching hostname)</li>
+<li>⚠️ FCrdNS mismatch for smtp.google.com: A=smtp.google.com, PTR=wm-in-f27.1e100.net. (expected matching hostname)</li>
+<li>⚠️ FCrdNS mismatch for smtp.google.com: A=smtp.google.com, PTR=wn-in-f27.1e100.net. (expected matching hostname)</li>
+<li>⚠️ FCrdNS mismatch for smtp.google.com: A=smtp.google.com, PTR=wn-in-f26.1e100.net. (expected matching hostname)</li>
+</ul>
+
+
+  <h2>Authoritative nameservers</h2>
+  <table>
+    <tr><th>Nameserver</th><th>IP</th></tr>
+    <tr><td>ns3.google.com</td><td>216.239.36.10</td></tr>
+<tr><td>ns2.google.com</td><td>216.239.34.10</td></tr>
+<tr><td>ns4.google.com</td><td>216.239.38.10</td></tr>
+<tr><td>ns1.google.com</td><td>216.239.32.10</td></tr>
+  </table>
+
+  <h2>Record consistency across nameservers</h2>
+  <p>Each row shows whether all authoritative NS return the same data.</p>
+  <table>
+    <tr><th>Record</th><th>Consistent</th><th>Value (from first NS)</th></tr>
+    <tr><td>SPF</td><td>✓</td><td><code>v=spf1 include:_spf.google.com ~all</code></td></tr>
+<tr><td>DMARC</td><td>✓</td><td><code>v=DMARC1; p=reject; rua=mailto:mailauth-reports@google.com</code></td></tr>
+<tr><td>MX</td><td>✓</td><td><code>10 smtp.google.com.</code></td></tr>
+<tr><td>DKIM (google) TXT</td><td>✓</td><td><code>*(empty)*</code></td></tr>
+<tr><td>DKIM (google) CNAME</td><td>✓</td><td><code>*(empty)*</code></td></tr>
+  </table>
+
+  <h2>MX host resolution</h2>
+  <table>
+    <tr><th>MX host</th><th>A</th><th>PTR</th><th>FCrdNS</th></tr>
+    <tr><td>smtp.google.com</td><td>74.125.71.27 74.125.71.26 74.125.133.27 64.233.166.26 74.125.133.26 2a00:1450:400c:c07::1a 2a00:1450:400c:c09::1b 2a00:1450:400c:c02::1b 2a00:1450:400c:c02::1a</td><td>wn-in-f27.1e100.net.</td><td>✗</td></tr>
+  </table>
+
+  <h2>Per-nameserver records</h2>
+  <h3>NS 216.239.36.10</h3>
+<p><strong>SPF:</strong></p>
+<pre><code>v=spf1 include:_spf.google.com ~all</code></pre>
+<p><strong>Other apex TXT (non-SPF):</strong></p>
+<pre><code>globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8=
+Z29vZ2xl
+docusign=1b0a6754-49b1-4db5-8540-d2c12664b289
+docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e
+google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o
+google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ
+work-accounts-domain-verification=Tcj6JjIMZOw2KsSEw2Nt2rLae89tN6
+cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b
+onetrust-domain-verification=6d685f1d41a94696ad7ef771f68993e0
+apple-domain-verification=30afIBcvSuDV2PLX
+onetrust-domain-verification=0d477fe608074e6f9c12bca7826035cc
+MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB
+facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95
+google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0</code></pre>
+<p><strong>DMARC:</strong></p>
+<pre><code>v=DMARC1; p=reject; rua=mailto:mailauth-reports@google.com</code></pre>
+<p><strong>MX:</strong></p>
+<pre><code>10 smtp.google.com.</code></pre>
+<p><strong>DKIM (google):</strong></p>
+<pre><code>(empty)</code></pre>
+<h3>NS 216.239.34.10</h3>
+<p><strong>SPF:</strong></p>
+<pre><code>v=spf1 include:_spf.google.com ~all</code></pre>
+<p><strong>Other apex TXT (non-SPF):</strong></p>
+<pre><code>docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e
+facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95
+google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o
+google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0
+work-accounts-domain-verification=Tcj6JjIMZOw2KsSEw2Nt2rLae89tN6
+Z29vZ2xl
+onetrust-domain-verification=6d685f1d41a94696ad7ef771f68993e0
+docusign=1b0a6754-49b1-4db5-8540-d2c12664b289
+MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB
+onetrust-domain-verification=0d477fe608074e6f9c12bca7826035cc
+cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b
+globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8=
+apple-domain-verification=30afIBcvSuDV2PLX
+google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ</code></pre>
+<p><strong>DMARC:</strong></p>
+<pre><code>v=DMARC1; p=reject; rua=mailto:mailauth-reports@google.com</code></pre>
+<p><strong>MX:</strong></p>
+<pre><code>10 smtp.google.com.</code></pre>
+<p><strong>DKIM (google):</strong></p>
+<pre><code>(empty)</code></pre>
+<h3>NS 216.239.38.10</h3>
+<p><strong>SPF:</strong></p>
+<pre><code>v=spf1 include:_spf.google.com ~all</code></pre>
+<p><strong>Other apex TXT (non-SPF):</strong></p>
+<pre><code>google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ
+Z29vZ2xl
+work-accounts-domain-verification=Tcj6JjIMZOw2KsSEw2Nt2rLae89tN6
+google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0
+facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95
+google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o
+apple-domain-verification=30afIBcvSuDV2PLX
+MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB
+cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b
+onetrust-domain-verification=6d685f1d41a94696ad7ef771f68993e0
+globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8=
+docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e
+docusign=1b0a6754-49b1-4db5-8540-d2c12664b289
+onetrust-domain-verification=0d477fe608074e6f9c12bca7826035cc</code></pre>
+<p><strong>DMARC:</strong></p>
+<pre><code>v=DMARC1; p=reject; rua=mailto:mailauth-reports@google.com</code></pre>
+<p><strong>MX:</strong></p>
+<pre><code>10 smtp.google.com.</code></pre>
+<p><strong>DKIM (google):</strong></p>
+<pre><code>(empty)</code></pre>
+<h3>NS 216.239.32.10</h3>
+<p><strong>SPF:</strong></p>
+<pre><code>v=spf1 include:_spf.google.com ~all</code></pre>
+<p><strong>Other apex TXT (non-SPF):</strong></p>
+<pre><code>google-site-verification=wD8N7i1JTNTkezJ49swvWW48f8_9xveREV4oB-0Hf5o
+globalsign-smime-dv=CDYX+XFHUw2wml6/Gb8+59BsH31KzUr6c1l2BPvqKX8=
+docusign=1b0a6754-49b1-4db5-8540-d2c12664b289
+cisco-ci-domain-verification=47c38bc8c4b74b7233e9053220c1bbe76bcc1cd33c7acf7acd36cd6a5332004b
+apple-domain-verification=30afIBcvSuDV2PLX
+facebook-domain-verification=22rm551cu4k0ab0bxsw536tlds4h95
+google-site-verification=4ibFUgB-wXLQ_S7vsXVomSTVamuOXBiVAzpR5IZ87D0
+onetrust-domain-verification=6d685f1d41a94696ad7ef771f68993e0
+google-site-verification=TV9-DBe4R80X4v0M4U_bd_J9cpOJM0nikft0jAgjmsQ
+MS=E4A68B9AB2BB9670BCE15412F62916164C0B20BB
+onetrust-domain-verification=0d477fe608074e6f9c12bca7826035cc
+work-accounts-domain-verification=Tcj6JjIMZOw2KsSEw2Nt2rLae89tN6
+Z29vZ2xl
+docusign=05958488-4752-4ef2-95eb-aa7ba8a3bd0e</code></pre>
+<p><strong>DMARC:</strong></p>
+<pre><code>v=DMARC1; p=reject; rua=mailto:mailauth-reports@google.com</code></pre>
+<p><strong>MX:</strong></p>
+<pre><code>10 smtp.google.com.</code></pre>
+<p><strong>DKIM (google):</strong></p>
+<pre><code>(empty)</code></pre>
+
+  <h2>Passed checks</h2>
+<ul>
+<li>✅ SPF records are consistent across all 4 authoritative nameservers</li>
+<li>✅ DMARC records are consistent across all 4 authoritative nameservers</li>
+<li>✅ MX records are consistent across all 4 authoritative nameservers</li>
+<li>✅ DKIM selector 'google' is consistent across all 4 authoritative nameservers</li>
+<li>✅ SPF record present: v=spf1 include:_spf.google.com ~all</li>
+<li>✅ DMARC record present: v=DMARC1; p=reject; rua=mailto:mailauth-reports@google.com</li>
+<li>✅ DMARC policy is p=reject (strictest)</li>
+<li>✅ MX records present: 10 smtp.google.com.</li>
+</ul>
+
+
+  <hr>
+  <p><em>Generated by webdns Mail DNS check</em></p>
+</body>
+</html>

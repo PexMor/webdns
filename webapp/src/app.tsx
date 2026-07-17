@@ -22,8 +22,19 @@ import {
   setRrDetailLevel,
   type RrViewMode,
 } from "./rrViewPrefsStore";
-import type { DetailLevel } from "./rr";
-import { addHistoryEntry } from "./lookupHistoryStore";
+import type { DetailLevel, FollowUpQuery } from "./rr";
+import { addHistoryEntry, importHistory, listHistory } from "./lookupHistoryStore";
+import {
+  DemoAutoplay,
+  demoNextStepIndex,
+  demoReplayDelay,
+  findDemoEntryIndex,
+  findDemoMatch,
+  loadDemoDataset,
+  replayDemoEntry,
+  type DemoDataset,
+} from "./demoMode";
+import { DemoProgressBar } from "./DemoProgressBar";
 import { getLookupForm, saveLookupForm } from "./lookupFormStore";
 import {
   initExpandRecordTypesByDefault,
@@ -32,6 +43,13 @@ import {
 import { listQuickLookups } from "./quickLookupStore";
 import { listWsHeaders, migrateLegacyApiKey } from "./wsHeaderStore";
 import { Menu, formatHistoryTime, type LookupSetup, type MenuPanel } from "./menu";
+import { MailDnsCheckReportView } from "./MailDnsCheckReportView";
+import {
+  runMailDnsCheck,
+  type MailDnsCheckProgress,
+  type MailDnsCheckReport,
+} from "./mailDnsCheck";
+import { parseDkimSelectorsInput } from "./mailDnsCheck/queryHelpers";
 import { useDnsSocket } from "./useDnsSocket";
 import { conventionTooltip, recordTypeForConvention } from "./recordTypes";
 import { RecordResultCard } from "./RecordResultCard";
@@ -51,8 +69,10 @@ import {
 } from "./queryTransforms";
 import { AuthExpiredOverlay } from "./AuthExpiredOverlay";
 import { humanizeRequestError } from "./formatRecordResult";
+import { decodeQueryFragment, encodeQueryFragment, type UrlQueryState } from "./urlQueryFragment";
 import type {
   CustomDnsServer,
+  DnsQueryResponse,
   DnsServerOption,
   LookupHistoryEntry,
   QuickLookup,
@@ -118,8 +138,27 @@ export function App() {
   const [dnsOverrideNotice, setDnsOverrideNotice] = useState<DnsOverrideNotice | null>(null);
   const [pendingExecute, setPendingExecute] = useState<PendingExecute | null>(null);
   const [viewingHistoryEntry, setViewingHistoryEntry] = useState<LookupHistoryEntry | null>(null);
+  const [lastExecutedDnsResolved, setLastExecutedDnsResolved] = useState("");
+  const [pendingUrlSetup, setPendingUrlSetup] = useState<UrlQueryState | null>(null);
+  const [demoDataset, setDemoDataset] = useState<DemoDataset | null>(null);
+  const [demoReady, setDemoReady] = useState(false);
+  const [demoLoadError, setDemoLoadError] = useState<string | null>(null);
+  const [demoResponse, setDemoResponse] = useState<DnsQueryResponse | null>(null);
+  const [demoErrorMessage, setDemoErrorMessage] = useState<string | null>(null);
+  const [autoplayRunning, setAutoplayRunning] = useState(false);
+  const [autoplayCountdownSec, setAutoplayCountdownSec] = useState(0);
+  const [demoProgressIndex, setDemoProgressIndex] = useState<number | null>(null);
+  const [mailDnsReport, setMailDnsReport] = useState<MailDnsCheckReport | null>(null);
+  const [mailDnsCheckRunning, setMailDnsCheckRunning] = useState(false);
+  const [mailDnsCheckProgress, setMailDnsCheckProgress] = useState<MailDnsCheckProgress | null>(
+    null
+  );
+  const [mailDnsCheckError, setMailDnsCheckError] = useState<string | null>(null);
 
   const pendingHistoryRef = useRef<PendingExecute | null>(null);
+  const autoplayRef = useRef<DemoAutoplay | null>(null);
+
+  const isDemoMode = config?.demo.enabled === true;
 
   const resolvedWsUrls = useMemo(
     () => (config ? getResolvedWsUrls(config.wsUrls) : []),
@@ -189,13 +228,34 @@ export function App() {
   // after a failed submit attempt.
   const previewError = previewResult && "error" in previewResult ? previewResult.error : null;
 
-  const { status, statusLabel, hasApiKey, response, errorMessage, saveApiKey, saveConnectionHeaders, query } =
+  const { status, statusLabel, hasApiKey, response, errorMessage, saveApiKey, saveConnectionHeaders, query, queryAsync } =
     useDnsSocket(effectiveWsUrl, {
       connectionHeaders,
       queryMap: config?.wsHeaderQueryMap ?? {},
-      credentialsReady: ready,
+      credentialsReady: ready && !isDemoMode,
       identityProxy: config?.identityProxy,
     });
+
+  const activeResponse = isDemoMode ? demoResponse : response;
+  const activeErrorMessage = isDemoMode ? demoErrorMessage : errorMessage;
+
+  const displayStatus = isDemoMode
+    ? demoLoadError
+      ? "error"
+      : demoReady
+        ? "demo"
+        : "connecting"
+    : status;
+
+  const displayStatusLabel = isDemoMode
+    ? demoLoadError
+      ? `demo data failed: ${demoLoadError}`
+      : demoReady
+        ? "Demo mode"
+        : "Loading demo…"
+    : statusLabel;
+
+  const canQuery = isDemoMode ? demoReady : status === "connected";
 
   useEffect(() => {
     async function init() {
@@ -211,7 +271,7 @@ export function App() {
       const headers = await listWsHeaders();
       const httpUrl = getStoredHttpServerUrl();
       const wsUrls = getResolvedWsUrls(loaded.wsUrls);
-      const wsUrl = pickInitialWsUrl(wsUrls, httpUrl);
+      const wsUrl = pickInitialWsUrl(wsUrls, httpUrl) ?? "";
       const options = buildDnsServerOptions(loaded.dnsServers, custom, wsUrl);
       const dnsAddress = pickInitialDnsServer(options);
 
@@ -234,11 +294,55 @@ export function App() {
       setEnumMode(savedForm.enumMode ?? false);
       setSrvFields(savedForm.srvFields ?? DEFAULT_SRV_FIELDS);
       setTlsaFields(savedForm.tlsaFields ?? DEFAULT_TLSA_FIELDS);
+      setPendingUrlSetup(decodeQueryFragment(window.location.hash));
+
+      if (loaded.demo.enabled) {
+        try {
+          const dataset = await loadDemoDataset(loaded.demo.dataUrl);
+          setDemoDataset(dataset);
+          setDemoReady(true);
+          setDemoLoadError(null);
+
+          const existingHistory = await listHistory();
+          if (existingHistory.length === 0) {
+            await importHistory(dataset.entries as unknown[]);
+          }
+        } catch (err) {
+          setDemoLoadError(err instanceof Error ? err.message : "Failed to load demo data");
+          setDemoReady(false);
+        }
+      }
+
       setReady(true);
     }
 
     init();
   }, []);
+
+  // Browser back/forward moves between the URL fragments each executed
+  // lookup pushes (see executeLookup below) — re-decode and stage the target
+  // query so the effect below can apply it once dnsOptions are ready.
+  useEffect(() => {
+    function handlePopState() {
+      setPendingUrlSetup(decodeQueryFragment(window.location.hash));
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !pendingUrlSetup || !dnsOptions.length) return;
+
+    const { dnsServerAddress, ...rest } = pendingUrlSetup;
+    applyLookupSetup({
+      ...rest,
+      includeDnsServer: Boolean(dnsServerAddress),
+      dnsServerAddress: dnsServerAddress ?? null,
+      overrideSource: "url",
+      autoExecute: true,
+    });
+    setPendingUrlSetup(null);
+  }, [ready, pendingUrlSetup, dnsOptions]);
 
   useEffect(() => {
     if (!ready) return;
@@ -266,24 +370,24 @@ export function App() {
 
   useEffect(() => {
     if (!pendingHistoryRef.current) return;
-    if (!response && !errorMessage) return;
+    if (!activeResponse && !activeErrorMessage) return;
 
     const entry = pendingHistoryRef.current;
     pendingHistoryRef.current = null;
     addHistoryEntry({
       ...entry,
-      results: response?.results,
-      responseError: response ? undefined : errorMessage ?? undefined,
+      results: activeResponse?.results,
+      responseError: activeResponse ? undefined : activeErrorMessage ?? undefined,
     }).catch((err) => {
       console.error("[history] failed to save entry", err);
     });
-  }, [response, errorMessage]);
+  }, [activeResponse, activeErrorMessage]);
 
   useEffect(() => {
     if (!pendingExecute) return;
 
-    if (status !== "connected") {
-      setFormError("Not connected to the server.");
+    if (!canQuery) {
+      setFormError(isDemoMode ? "Demo data is not ready." : "Not connected to the server.");
       setPendingExecute(null);
       return;
     }
@@ -314,12 +418,48 @@ export function App() {
       if (error) {
         setFormError(error);
       } else if (!sent) {
-        setFormError("Not connected to the server.");
+        setFormError(
+          isDemoMode ? "No matching demo response for this query." : "Not connected to the server."
+        );
       }
     });
 
     setPendingExecute(null);
-  }, [pendingExecute, status, dnsOptions, effectiveWsUrl]);
+  }, [pendingExecute, canQuery, isDemoMode, dnsOptions, effectiveWsUrl]);
+
+  useEffect(() => {
+    if (!isDemoMode || !demoReady || !demoDataset || !config?.demo.autoplay.enabled) return;
+    if (autoplayRef.current) return;
+
+    const autoplay = new DemoAutoplay(
+      demoDataset.entries,
+      config.demo.autoplay.intervalMs,
+      (entry) => {
+        applyLookupSetup({
+          domain: entry.domain,
+          recordTypes: entry.recordTypes,
+          includeDnsServer: true,
+          dnsServerAddress: entry.dnsServerAddress,
+          enumMode: entry.enumMode,
+          srvFields: entry.srvFields,
+          tlsaFields: entry.tlsaFields,
+          overrideSource: "demo-autoplay",
+          autoExecute: true,
+        });
+        closeMenu();
+      },
+      (seconds) => setAutoplayCountdownSec(seconds)
+    );
+    autoplayRef.current = autoplay;
+    autoplay.start(0, { immediate: true });
+    setAutoplayRunning(true);
+
+    return () => {
+      autoplay.stop();
+      autoplayRef.current = null;
+      setAutoplayCountdownSec(0);
+    };
+  }, [isDemoMode, demoReady, demoDataset, config?.demo.autoplay.enabled, config?.demo.autoplay.intervalMs]);
 
   function dnsServerLabel(address: string): string {
     const match = dnsOptions.find((option) => option.address === address);
@@ -405,8 +545,52 @@ export function App() {
       return { sent: false, error: result.error };
     }
 
-    const sent = query(result.queryName, recordTypes, dnsServerResolved);
-    if (sent) {
+    if (isDemoMode) {
+      if (!demoDataset) {
+        return { sent: false, error: "Demo data is not ready." };
+      }
+
+      const match = findDemoMatch(demoDataset, {
+        domain: trimmed,
+        recordTypes,
+        dnsServerAddress,
+        dnsServerResolved,
+        enumMode: execEnumMode,
+        srvFields: execSrvFields,
+        tlsaFields: execTlsaFields,
+      });
+
+      if (!match) {
+        return { sent: false, error: "No matching demo response for this query." };
+      }
+
+      const entryIndex = findDemoEntryIndex(demoDataset, {
+        domain: trimmed,
+        recordTypes,
+        dnsServerAddress,
+        dnsServerResolved,
+        enumMode: execEnumMode,
+        srvFields: execSrvFields,
+        tlsaFields: execTlsaFields,
+      });
+      if (entryIndex >= 0) {
+        setDemoProgressIndex(entryIndex);
+      }
+
+      autoplayRef.current?.pauseForReplay();
+
+      await demoReplayDelay();
+
+      const replay = replayDemoEntry(match, result.queryName);
+      if (replay.error) {
+        setDemoErrorMessage(replay.error);
+        setDemoResponse(null);
+      } else {
+        setDemoErrorMessage(null);
+        setDemoResponse(replay.response);
+      }
+
+      setLastExecutedDnsResolved(dnsServerResolved);
       pendingHistoryRef.current = {
         domain: trimmed,
         recordTypes,
@@ -419,6 +603,57 @@ export function App() {
       setViewingHistoryEntry(null);
       if (!expandRecordTypesByDefault) {
         setRecordTypesFolded(true);
+      }
+
+      const newHash = `#${encodeQueryFragment({
+        domain: trimmed,
+        recordTypes,
+        dnsServerAddress,
+        enumMode: execEnumMode,
+        srvFields: execSrvFields,
+        tlsaFields: execTlsaFields,
+      })}`;
+      if (window.location.hash !== newHash) {
+        window.history.pushState(null, "", newHash);
+      }
+
+      autoplayRef.current?.resumeAfterReplay();
+
+      return { sent: true };
+    }
+
+    const sent = query(result.queryName, recordTypes, dnsServerResolved);
+    if (sent) {
+      setLastExecutedDnsResolved(dnsServerResolved);
+      pendingHistoryRef.current = {
+        domain: trimmed,
+        recordTypes,
+        dnsServerAddress,
+        dnsServerResolved,
+        enumMode: execEnumMode,
+        srvFields: execSrvFields,
+        tlsaFields: execTlsaFields,
+      };
+      setViewingHistoryEntry(null);
+      if (!expandRecordTypesByDefault) {
+        setRecordTypesFolded(true);
+      }
+
+      // Push a browser-navigable entry for this executed lookup so back/forward
+      // moves between queries, and the URL stays shareable. Skipped when the
+      // fragment already matches (e.g. we just got here via popstate, or a
+      // shared link that reproduces the query it was loaded with) so we don't
+      // create a duplicate entry or fight the browser's own navigation.
+      const newHash = `#${encodeQueryFragment({
+        domain: trimmed,
+        recordTypes,
+        dnsServerAddress,
+        enumMode: execEnumMode,
+        srvFields: execSrvFields,
+        tlsaFields: execTlsaFields,
+      })}`;
+      if (window.location.hash !== newHash) {
+        window.history.pushState(null, "", newHash);
       }
     }
     return { sent };
@@ -513,13 +748,61 @@ export function App() {
     if (error) {
       setFormError(error);
     } else if (!sent) {
-      setFormError("Not connected to the server.");
+      setFormError(
+        isDemoMode ? "No matching demo response for this query." : "Not connected to the server."
+      );
     }
+  }
+
+  function handleStopAutoplay() {
+    autoplayRef.current?.stop();
+    setAutoplayRunning(false);
+    setAutoplayCountdownSec(0);
+  }
+
+  function handleResumeAutoplay() {
+    autoplayRef.current?.resume();
+    setAutoplayRunning(autoplayRef.current?.isRunning() ?? false);
+  }
+
+  function runDemoStep(index: number) {
+    if (!demoDataset || index < 0 || index >= demoDataset.entries.length) return;
+
+    const entry = demoDataset.entries[index];
+    autoplayRef.current?.alignAfterManualStep(index);
+
+    applyLookupSetup({
+      domain: entry.domain,
+      recordTypes: entry.recordTypes,
+      includeDnsServer: true,
+      dnsServerAddress: entry.dnsServerAddress,
+      enumMode: entry.enumMode,
+      srvFields: entry.srvFields,
+      tlsaFields: entry.tlsaFields,
+      overrideSource: "demo-manual",
+      autoExecute: true,
+    });
+    closeMenu();
+  }
+
+  function handleDemoSelectStep(index: number) {
+    if (autoplayRunning) return;
+    runDemoStep(index);
+  }
+
+  function handleDemoNextStep() {
+    if (autoplayRunning || !demoDataset) return;
+    const nextIndex = demoNextStepIndex(demoProgressIndex, demoDataset.entries.length);
+    runDemoStep(nextIndex);
   }
 
   function handleRunLookupSetup(setup: LookupSetup) {
     applyLookupSetup({ ...setup, autoExecute: true });
     closeMenu();
+  }
+
+  function handleFollowUp({ domain: followUpDomain, recordTypes }: FollowUpQuery) {
+    handleRunLookupSetup({ domain: followUpDomain, recordTypes });
   }
 
   function handleViewHistoryEntry(entry: LookupHistoryEntry) {
@@ -569,6 +852,67 @@ export function App() {
     setMenuPanel(null);
   }
 
+  async function handleRunMailDnsCheck(input: { domain: string; dkimSelectors: string }) {
+    if (isDemoMode) {
+      setMailDnsCheckError("Mail DNS check requires a live backend connection.");
+      return;
+    }
+    if (status !== "connected") {
+      setMailDnsCheckError("Not connected to the server.");
+      return;
+    }
+
+    closeMenu();
+    setMailDnsCheckError(null);
+    setMailDnsCheckRunning(true);
+    setMailDnsCheckProgress({
+      phase: "starting",
+      message: "Starting mail DNS check…",
+      completed: 0,
+      total: 1,
+    });
+
+    const mailQuery = async (req: {
+      domain: string;
+      recordTypes: string[];
+      dnsServer?: string;
+    }) => queryAsync(req.domain, req.recordTypes, req.dnsServer);
+
+    try {
+      const report = await runMailDnsCheck(
+        {
+          domain: input.domain,
+          dkimSelectors: parseDkimSelectorsInput(input.dkimSelectors),
+        },
+        mailQuery,
+        {
+          defaultResolver: selectedDnsResolved,
+          onProgress: setMailDnsCheckProgress,
+        }
+      );
+      setMailDnsReport(report);
+    } catch (error) {
+      setMailDnsCheckError(
+        error instanceof Error ? error.message : "Mail DNS check failed unexpectedly."
+      );
+    } finally {
+      setMailDnsCheckRunning(false);
+      setMailDnsCheckProgress(null);
+    }
+  }
+
+  if (mailDnsReport) {
+    return (
+      <main class="app app--mail-dns-report">
+        <AuthExpiredOverlay />
+        <MailDnsCheckReportView
+          report={mailDnsReport}
+          onBack={() => setMailDnsReport(null)}
+        />
+      </main>
+    );
+  }
+
   if (!ready) {
     return (
       <main class="app">
@@ -583,7 +927,16 @@ export function App() {
       <header>
         <h1>DNS Lookup</h1>
         <div class="header-actions">
-          <span class={`status status--${status}`}>{statusLabel}</span>
+          <span class={`status status--${displayStatus}`}>{displayStatusLabel}</span>
+          {isDemoMode && demoReady && config?.demo.autoplay.enabled && (
+            <button
+              type="button"
+              class="demo-replay-control"
+              onClick={autoplayRunning ? handleStopAutoplay : handleResumeAutoplay}
+            >
+              {autoplayRunning ? "Stop replay" : "Resume replay"}
+            </button>
+          )}
           <button
             type="button"
             class="hamburger"
@@ -594,6 +947,34 @@ export function App() {
           </button>
         </div>
       </header>
+
+      {mailDnsCheckRunning && mailDnsCheckProgress && (
+        <p class="mail-dns-check-progress" role="status">
+          {mailDnsCheckProgress.message}
+        </p>
+      )}
+
+      {mailDnsCheckError && (
+        <div class="record-card record-card--error" role="alert">
+          <h3>Mail DNS check failed</h3>
+          <p class="record-message record-message--error">{mailDnsCheckError}</p>
+          <button type="button" onClick={() => setMailDnsCheckError(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {isDemoMode && demoReady && demoDataset && (
+        <DemoProgressBar
+          entries={demoDataset.entries}
+          currentIndex={demoProgressIndex}
+          autoplayRunning={autoplayRunning}
+          autoplayCountdownSec={autoplayCountdownSec}
+          autoplayIntervalMs={config?.demo.autoplay.intervalMs ?? 5000}
+          onSelectStep={handleDemoSelectStep}
+          onNextStep={handleDemoNextStep}
+        />
+      )}
 
       <p class={`active-settings${dnsOverrideNotice ? " active-settings--overridden" : ""}`}>
         Resolver: <strong>{selectedDnsResolved}</strong>
@@ -697,7 +1078,7 @@ export function App() {
 
         <button
           type="submit"
-          disabled={status !== "connected" || blockingTypes.length > 0 || Boolean(previewError)}
+          disabled={!canQuery || blockingTypes.length > 0 || Boolean(previewError)}
         >
           Lookup
         </button>
@@ -738,6 +1119,8 @@ export function App() {
                     domain={viewingHistoryEntry.domain}
                     defaultViewMode={rrDefaultViewMode}
                     detailLevel={rrDetailLevel}
+                    dnsServerResolved={viewingHistoryEntry.dnsServerResolved}
+                    onFollowUp={handleFollowUp}
                   />
                 ))
               : !viewingHistoryEntry.responseError && (
@@ -749,22 +1132,24 @@ export function App() {
           </>
         ) : (
           <>
-            {errorMessage && (
+            {activeErrorMessage && (
               <div class="record-card record-card--error">
                 <h3>Lookup failed</h3>
                 <p class="record-message record-message--error">
-                  {humanizeRequestError(errorMessage)}
+                  {humanizeRequestError(activeErrorMessage)}
                 </p>
               </div>
             )}
-            {response &&
-              response.results.map((result) => (
+            {activeResponse &&
+              activeResponse.results.map((result) => (
                 <RecordResultCard
                   key={result.record_type}
                   result={result}
-                  domain={response.domain}
+                  domain={activeResponse.domain}
                   defaultViewMode={rrDefaultViewMode}
                   detailLevel={rrDetailLevel}
+                  dnsServerResolved={lastExecutedDnsResolved || selectedDnsResolved}
+                  onFollowUp={handleFollowUp}
                 />
               ))}
           </>
@@ -819,6 +1204,9 @@ export function App() {
         onRrDefaultViewModeChange={handleRrDefaultViewModeChange}
         expandRecordTypesByDefault={expandRecordTypesByDefault}
         onExpandRecordTypesByDefaultChange={handleExpandRecordTypesByDefaultChange}
+        canRunMailDnsCheck={canQuery && !isDemoMode}
+        onRunMailDnsCheck={handleRunMailDnsCheck}
+        mailDnsCheckDomainSeed={domain}
       />
     </main>
   );

@@ -22,6 +22,7 @@ const A_FIELDS: RrFieldMeta[] = [
   {
     key: "address",
     label: "IPv4 address",
+    kind: "ip-address",
     explain: {
       minimal: "IPv4 address",
       standard: "The IPv4 address this hostname resolves to.",
@@ -35,6 +36,7 @@ const AAAA_FIELDS: RrFieldMeta[] = [
   {
     key: "address",
     label: "IPv6 address",
+    kind: "ip-address",
     explain: {
       minimal: "IPv6 address",
       standard: "The IPv6 address this hostname resolves to.",

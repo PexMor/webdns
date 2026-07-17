@@ -30,6 +30,7 @@ const MX_FIELDS: RrFieldMeta[] = [
   {
     key: "exchange",
     label: "Mail exchanger",
+    kind: "hostname",
     explain: {
       minimal: "Mail server hostname",
       standard: "The hostname of a mail server that accepts email for this domain.",

@@ -1,4 +1,5 @@
 import type {
+  DemoConfig,
   DnsServerConfigEntry,
   DnsServerOption,
   IdentityProxyConfig,
@@ -15,6 +16,12 @@ const DEFAULT_IDENTITY_PROXY: IdentityProxyConfig = {
   probePath: "/version",
 };
 
+export const DEFAULT_DEMO_CONFIG: DemoConfig = {
+  enabled: false,
+  dataUrl: "/demo.jsonl",
+  autoplay: { enabled: false, intervalMs: 5000 },
+};
+
 export const DEFAULT_CONFIG: RuntimeConfig = {
   wsUrls: ["/ws"],
   dnsServers: [
@@ -26,6 +33,7 @@ export const DEFAULT_CONFIG: RuntimeConfig = {
   wsConnectionHeaders: [],
   wsHeaderQueryMap: {},
   identityProxy: { ...DEFAULT_IDENTITY_PROXY },
+  demo: { ...DEFAULT_DEMO_CONFIG, autoplay: { ...DEFAULT_DEMO_CONFIG.autoplay } },
 };
 
 /**
@@ -45,6 +53,39 @@ export function normalizeIdentityProxy(value: unknown): IdentityProxyConfig {
       : DEFAULT_IDENTITY_PROXY.probePath;
 
   return { enabled, probePath };
+}
+
+/** `demo` is opt-in: any missing/invalid value resolves to disabled defaults. */
+export function normalizeDemoConfig(value: unknown): DemoConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      ...DEFAULT_DEMO_CONFIG,
+      autoplay: { ...DEFAULT_DEMO_CONFIG.autoplay },
+    };
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const enabled = candidate.enabled === true;
+  const dataUrl =
+    typeof candidate.dataUrl === "string" && candidate.dataUrl.trim()
+      ? candidate.dataUrl.trim()
+      : DEFAULT_DEMO_CONFIG.dataUrl;
+
+  let autoplayEnabled = false;
+  let intervalMs = DEFAULT_DEMO_CONFIG.autoplay.intervalMs;
+  if (candidate.autoplay && typeof candidate.autoplay === "object" && !Array.isArray(candidate.autoplay)) {
+    const ap = candidate.autoplay as Record<string, unknown>;
+    autoplayEnabled = ap.enabled === true;
+    if (typeof ap.intervalMs === "number" && Number.isFinite(ap.intervalMs) && ap.intervalMs > 0) {
+      intervalMs = Math.round(ap.intervalMs);
+    }
+  }
+
+  return {
+    enabled,
+    dataUrl,
+    autoplay: { enabled: autoplayEnabled, intervalMs },
+  };
 }
 
 interface ConfigHeaderInput {
@@ -125,6 +166,7 @@ function isValidConfig(data: unknown): data is {
   wsConnectionHeaders?: unknown;
   wsHeaderQueryMap?: unknown;
   identityProxy?: unknown;
+  demo?: unknown;
 } {
   const d = data as Record<string, unknown> | null;
   return Boolean(
@@ -153,12 +195,21 @@ export async function loadConfig(): Promise<RuntimeConfig> {
         ? (data.wsHeaderQueryMap as Record<string, string>)
         : {};
 
+    const demo = normalizeDemoConfig(data.demo);
+    const wsUrls =
+      demo.enabled && data.wsUrls.length === 0
+        ? []
+        : data.wsUrls.length
+          ? data.wsUrls
+          : DEFAULT_CONFIG.wsUrls;
+
     return {
-      wsUrls: data.wsUrls.length ? data.wsUrls : DEFAULT_CONFIG.wsUrls,
+      wsUrls,
       dnsServers: data.dnsServers.length ? data.dnsServers : DEFAULT_CONFIG.dnsServers,
       wsConnectionHeaders,
       wsHeaderQueryMap,
       identityProxy: normalizeIdentityProxy(data.identityProxy),
+      demo,
     };
   } catch {
     return {
@@ -167,6 +218,7 @@ export async function loadConfig(): Promise<RuntimeConfig> {
       wsConnectionHeaders: [],
       wsHeaderQueryMap: {},
       identityProxy: { ...DEFAULT_IDENTITY_PROXY },
+      demo: { ...DEFAULT_DEMO_CONFIG, autoplay: { ...DEFAULT_DEMO_CONFIG.autoplay } },
     };
   }
 }

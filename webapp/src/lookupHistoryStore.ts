@@ -8,7 +8,12 @@ function typesKey(recordTypes: string[]): string {
   return [...recordTypes].sort().join(",");
 }
 
-function conventionKey(entry: LookupHistoryEntry): string {
+export type HistoryMatchFields = Pick<
+  LookupHistoryEntry,
+  "domain" | "recordTypes" | "dnsServerAddress" | "enumMode" | "srvFields" | "tlsaFields"
+>;
+
+function conventionKey(entry: HistoryMatchFields): string {
   return JSON.stringify({
     enumMode: entry.enumMode === true,
     srvFields: entry.srvFields ?? null,
@@ -16,13 +21,18 @@ function conventionKey(entry: LookupHistoryEntry): string {
   });
 }
 
-function entriesMatch(a: LookupHistoryEntry, b: LookupHistoryEntry): boolean {
+/** Shared equivalence check for history deduplication and demo replay matching. */
+export function historyEntriesMatch(a: HistoryMatchFields, b: HistoryMatchFields): boolean {
   return (
     a.domain === b.domain &&
     a.dnsServerAddress === b.dnsServerAddress &&
     typesKey(a.recordTypes) === typesKey(b.recordTypes) &&
     conventionKey(a) === conventionKey(b)
   );
+}
+
+function entriesMatch(a: LookupHistoryEntry, b: LookupHistoryEntry): boolean {
+  return historyEntriesMatch(a, b);
 }
 
 /** Builds the record to persist for a fresh (non-duplicate) history entry. */

@@ -18,6 +18,7 @@ function targetFields(label: string, standard: string, detailed: string): RrFiel
     {
       key: "target",
       label,
+      kind: "hostname",
       explain: { minimal: label, standard, detailed },
     },
   ];

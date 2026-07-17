@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_CONFIG, loadConfig, normalizeIdentityProxy } from "./loadConfig";
+import { DEFAULT_CONFIG, loadConfig, normalizeDemoConfig, normalizeIdentityProxy } from "./loadConfig";
 
 describe("normalizeIdentityProxy", () => {
   it("defaults to disabled when absent", () => {
@@ -41,6 +41,30 @@ describe("normalizeIdentityProxy", () => {
   it("falls back to default probePath when probePath is blank or non-string", () => {
     expect(normalizeIdentityProxy({ enabled: true, probePath: "" }).probePath).toBe("/version");
     expect(normalizeIdentityProxy({ enabled: true, probePath: 123 }).probePath).toBe("/version");
+  });
+});
+
+describe("normalizeDemoConfig", () => {
+  it("defaults to disabled when absent", () => {
+    expect(normalizeDemoConfig(undefined)).toEqual(DEFAULT_CONFIG.demo);
+  });
+
+  it("defaults to disabled when not an object", () => {
+    expect(normalizeDemoConfig("nope")).toEqual(DEFAULT_CONFIG.demo);
+  });
+
+  it("respects enabled with autoplay settings", () => {
+    expect(
+      normalizeDemoConfig({
+        enabled: true,
+        dataUrl: "/custom.jsonl",
+        autoplay: { enabled: true, intervalMs: 3000 },
+      })
+    ).toEqual({
+      enabled: true,
+      dataUrl: "/custom.jsonl",
+      autoplay: { enabled: true, intervalMs: 3000 },
+    });
   });
 });
 
@@ -98,5 +122,39 @@ describe("loadConfig", () => {
 
     const config = await loadConfig();
     expect(config.identityProxy).toEqual(DEFAULT_CONFIG.identityProxy);
+    expect(config.demo).toEqual(DEFAULT_CONFIG.demo);
+  });
+
+  it("parses demo config and keeps empty wsUrls when demo is enabled", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        wsUrls: [],
+        dnsServers: [{ label: "Cloudflare", address: "1.1.1.1" }],
+        demo: { enabled: true, dataUrl: "/demo.jsonl", autoplay: { enabled: true, intervalMs: 4000 } },
+      }),
+    }) as unknown as typeof fetch;
+
+    const config = await loadConfig();
+    expect(config.wsUrls).toEqual([]);
+    expect(config.demo).toEqual({
+      enabled: true,
+      dataUrl: "/demo.jsonl",
+      autoplay: { enabled: true, intervalMs: 4000 },
+    });
+  });
+
+  it("disables demo when config.json has an invalid demo value", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        wsUrls: ["/ws"],
+        dnsServers: [{ label: "Test", address: "1.1.1.1" }],
+        demo: "yes",
+      }),
+    }) as unknown as typeof fetch;
+
+    const config = await loadConfig();
+    expect(config.demo).toEqual(DEFAULT_CONFIG.demo);
   });
 });

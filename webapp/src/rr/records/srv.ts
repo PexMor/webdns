@@ -51,6 +51,7 @@ const SRV_FIELDS: RrFieldMeta[] = [
   {
     key: "target",
     label: "Target",
+    kind: "hostname",
     explain: {
       minimal: "Target hostname",
       standard: "The hostname that provides the service.",

@@ -1,0 +1,26 @@
+{
+  "wsUrls": ["/ws"],
+  "dnsServers": [
+    { "label": "Google Primary", "address": "8.8.8.8" },
+    { "label": "Google Secondary", "address": "8.8.4.4" },
+    { "label": "Cloudflare", "address": "1.1.1.1" },
+    { "label": "Local API Server", "address": "auto" }
+  ],
+  "wsConnectionHeaders": [],
+  "wsHeaderQueryMap": {
+    "Authorization": "authorization"
+  },
+  "identityProxy": {
+    "enabled": false,
+    "probePath": "/version"
+  },
+  "_comment_demo": "Static demo deploy example (disabled by default): set demo.enabled true, wsUrls [], and point dataUrl at /demo.jsonl",
+  "demo": {
+    "enabled": false,
+    "dataUrl": "/demo.jsonl",
+    "autoplay": {
+      "enabled": false,
+      "intervalMs": 5000
+    }
+  }
+}

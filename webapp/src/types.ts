@@ -71,12 +71,25 @@ export interface IdentityProxyConfig {
   probePath: string;
 }
 
+/** Automatic replay of bundled demo lookups (see `demo-mode` capability). */
+export interface DemoAutoplayConfig {
+  enabled: boolean;
+  intervalMs: number;
+}
+
+export interface DemoConfig {
+  enabled: boolean;
+  dataUrl: string;
+  autoplay: DemoAutoplayConfig;
+}
+
 export interface RuntimeConfig {
   wsUrls: string[];
   dnsServers: DnsServerConfigEntry[];
   wsConnectionHeaders: WsHeader[];
   wsHeaderQueryMap: Record<string, string>;
   identityProxy: IdentityProxyConfig;
+  demo: DemoConfig;
 }
 
 /** Extra input state for record types whose query name is constructed from a
